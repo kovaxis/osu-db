@@ -12,14 +12,23 @@ pub struct CollectionList {
 }
 impl CollectionList {
     ///Read a collection list from its raw bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<CollectionList, NomErr<&[u8]>> {
-        collections(bytes).map(|(_rem,collections)| collections)
+    pub fn from_bytes(bytes: &[u8]) -> Result<CollectionList, Error> {
+        Ok(collections(bytes).map(|(_rem,collections)| collections)?)
     }
     
     ///Read a collection list from a `collection.db` file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<CollectionList, Error> {
-        let bytes=fs::read(path)?;
-        Ok(CollectionList::from_bytes(&bytes)?)
+        Self::from_bytes(&fs::read(path)?)
+    }
+    
+    ///Writes the collection list to an arbitrary writer.
+    pub fn to_writer<W: Write>(&self,mut out: W) -> io::Result<()> {
+        self.wr(&mut out)
+    }
+    
+    ///Similar to `to_writer` but writes the collection database to a file (ie. `collection.db`).
+    pub fn to_file<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+        self.to_writer(BufWriter::new(File::create(path)?))
     }
 }
 
@@ -41,3 +50,11 @@ named!(collections<&[u8], CollectionList>, do_parse!(
     )) >>
     (CollectionList { version, collections })
 ));
+writer!(CollectionList [this,out] {
+    this.version.wr(out)?;
+    PrefixedList(&this.collections).wr(out)?;
+});
+writer!(Collection [this,out] {
+    this.name.wr(out)?;
+    PrefixedList(&this.beatmap_hashes).wr(out)?;
+});

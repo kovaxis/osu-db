@@ -35,18 +35,24 @@ pub struct Listing {
     pub mysterious_int: Option<u32>,
 }
 impl Listing {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Listing, NomErr<&[u8]>> {
-        listing(bytes).map(|(_rem, listing)| listing)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Listing, Error> {
+        Ok(listing(bytes).map(|(_rem, listing)| listing)?)
     }
 
+    ///Parse a listing from the `osu!.db` database file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Listing, Error> {
-        let bytes = fs::read(path)?;
-        Ok(Listing::from_bytes(&bytes)?)
+        Self::from_bytes(&fs::read(path)?)
     }
     
-    /*pub fn write<W: Write>(&self,mut out: W) -> io::Result<()> {
-        Listing::writer(self,&mut out)
-    }*/
+    ///Write the listing to an arbitrary writer.
+    pub fn to_writer<W: Write>(&self,mut out: W) -> io::Result<()> {
+        self.wr(&mut out)
+    }
+    
+    ///Similar to `to_writer` but writes the listing to a file (ie. `osu!.db`).
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+        self.to_writer(BufWriter::new(File::create(path)?))
+    }
 }
 
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
@@ -242,6 +248,10 @@ named!(listing<&[u8], Listing>, do_parse!(
 writer!(Listing [this, out] {
     this.version.wr(out)?;
     this.folder_count.wr(out)?;
+    write_option(out,this.unban_date,0_u64)?;
+    this.player_name.wr(out)?;
+    PrefixedList(&this.beatmaps).wr_args(out,this.version)?;
+    this.mysterious_int.unwrap_or(0).wr(out)?;
 });
 
 
@@ -314,6 +324,81 @@ named_args!(beatmap (version: u32) <&[u8], Beatmap>, length_value!(int, do_parse
         last_played: build_option(unplayed,last_played),
     })
 )));
+writer!(Beatmap [this,out,version: u32] {
+    //Write beatmap into a temporary buffer, as beatmap length needs to be
+    //known and prefixed
+    let mut raw_buf=Vec::new();
+    {
+        let out=&mut raw_buf;
+        macro_rules! wr_difficulty_value {
+            ($f32:expr) => {{
+                if version>=BREAKING_CHANGE {
+                    $f32.wr(out)?;
+                }else{
+                    ($f32 as u8).wr(out)?;
+                }
+            }};
+        }
+        this.artist_ascii.wr(out)?;
+        this.artist_unicode.wr(out)?;
+        this.title_ascii.wr(out)?;
+        this.title_unicode.wr(out)?;
+        this.creator.wr(out)?;
+        this.difficulty_name.wr(out)?;
+        this.audio.wr(out)?;
+        this.hash.wr(out)?;
+        this.file_name.wr(out)?;
+        this.status.wr(out)?;
+        this.hitcircle_count.wr(out)?;
+        this.slider_count.wr(out)?;
+        this.spinner_count.wr(out)?;
+        this.last_modified.wr(out)?;
+        wr_difficulty_value!(this.approach_rate);
+        wr_difficulty_value!(this.circle_size);
+        wr_difficulty_value!(this.hp_drain);
+        wr_difficulty_value!(this.overall_difficulty);
+        this.slider_velocity.wr(out)?;
+        this.std_ratings.wr_args(out,version)?;
+        this.taiko_ratings.wr_args(out,version)?;
+        this.ctb_ratings.wr_args(out,version)?;
+        this.mania_ratings.wr_args(out,version)?;
+        this.drain_time.wr(out)?;
+        this.total_time.wr(out)?;
+        this.preview_time.wr(out)?;
+        PrefixedList(&this.timing_points).wr(out)?;
+        (this.beatmap_id as u32).wr(out)?;
+        (this.beatmapset_id as u32).wr(out)?;
+        this.thread_id.wr(out)?;
+        this.std_grade.wr(out)?;
+        this.taiko_grade.wr(out)?;
+        this.ctb_grade.wr(out)?;
+        this.mania_grade.wr(out)?;
+        this.local_beatmap_offset.wr(out)?;
+        this.stack_leniency.wr(out)?;
+        this.mode.raw().wr(out)?;
+        this.song_source.wr(out)?;
+        this.tags.wr(out)?;
+        this.online_offset.wr(out)?;
+        this.title_font.wr(out)?;
+        write_option(out,this.last_played,0_u64)?;
+        this.is_osz2.wr(out)?;
+        this.folder_name.wr(out)?;
+        this.last_online_check.wr(out)?;
+        this.ignore_sounds.wr(out)?;
+        this.ignore_skin.wr(out)?;
+        this.disable_storyboard.wr(out)?;
+        this.disable_video.wr(out)?;
+        this.visual_override.wr(out)?;
+        if version<BREAKING_CHANGE {
+            this.mysterious_short.unwrap_or(0).wr(out)?;
+        }
+        this.mysterious_last_modified.wr(out)?;
+        this.mania_scroll_speed.wr(out)?;
+    }
+    //Write the raw buffer prefixed by its length
+    (raw_buf.len() as u32).wr(out)?;
+    out.write_all(&raw_buf)?;
+});
 
 named!(timing_point<&[u8], TimingPoint>, do_parse!(
     bpm: double >>
@@ -323,6 +408,11 @@ named!(timing_point<&[u8], TimingPoint>, do_parse!(
         bpm,offset,inherits
     })
 ));
+writer!(TimingPoint [this,out] {
+    this.bpm.wr(out)?;
+    this.offset.wr(out)?;
+    this.inherits.wr(out)?;
+});
 
 named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value!(version>=BREAKING_CHANGE),
     true => length_count!(int, do_parse!(
@@ -334,6 +424,17 @@ named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value
     )) |
     false => value!(Vec::new())
 ));
+writer!(Vec<(ModSet,f64)> [this,out,version: u32] {
+    if version>=BREAKING_CHANGE {
+        PrefixedList(&this).wr(out)?;
+    }
+});
+writer!((ModSet,f64) [this,out] {
+    0x08_u8.wr(out)?;
+    this.0.bits().wr(out)?;
+    0x0d_u8.wr(out)?;
+    this.1.wr(out)?;
+});
 
 ///Before the breaking change in 2014 several difficulty values were stored as bytes.
 ///After it they were stored as single floats.
@@ -347,8 +448,10 @@ fn difficulty_value(bytes: &[u8], version: u32) -> IResult<&[u8], f32> {
 }
 
 named!(ranked_status<&[u8], RankedStatus>, map_opt!(byte, RankedStatus::from_raw));
+writer!(RankedStatus [this,out] this.raw().wr(out)?);
 
 named!(grade<&[u8], Grade>, map_opt!(byte, Grade::from_raw));
+writer!(Grade [this,out] this.raw().wr(out)?);
 
 fn build_option<T>(is_none: bool, content: T) -> Option<T> {
     if is_none {
@@ -356,4 +459,17 @@ fn build_option<T>(is_none: bool, content: T) -> Option<T> {
     } else {
         Some(content)
     }
+}
+fn write_option<W: Write,T: SimpleWritable,D: SimpleWritable>(out: &mut W, opt: Option<T>, def: D) -> io::Result<()> {
+    match opt {
+        Some(t) => {
+            false.wr(out)?;
+            t.wr(out)?;
+        },
+        None => {
+            true.wr(out)?;
+            def.wr(out)?;
+        },
+    }
+    Ok(())
 }

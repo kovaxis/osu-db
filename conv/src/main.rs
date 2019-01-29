@@ -4,11 +4,8 @@
 
 use failure::{bail, err_msg, format_err, AsFail, Fallible, ResultExt};
 use osu_db::{CollectionList, Listing, Replay, ScoreList};
-use serde::Serialize;
-use std::{
-    env, fmt, fs,
-    path::{Path, PathBuf},
-};
+use serde::{de::DeserializeOwned, Serialize};
+use std::{env, fmt, fs, path::PathBuf};
 
 const HELP_MSG: &'static str = r#"
 Usage: osuconv [options] <input> [<output>]
@@ -63,15 +60,37 @@ impl BinFormat {
         })
     }
 
-    fn convert<P: AsRef<Path>>(self, reencode: TextFormat, input: P) -> Fallible<Vec<u8>> {
+    fn decode(self, out_format: TextFormat, input: &[u8]) -> Fallible<Vec<u8>> {
         let input = input.as_ref();
-        eprintln!("reading binary from '{}'", input.display());
+        eprintln!("parsing binary as a {:?} file", self);
         Ok(match self {
-            BinFormat::Listing => reencode.write(&Listing::from_file(input)?)?,
-            BinFormat::Collections => reencode.write(&CollectionList::from_file(input)?)?,
-            BinFormat::Scores => reencode.write(&ScoreList::from_file(input)?)?,
-            BinFormat::Replay => reencode.write(&Replay::from_file(input)?)?,
+            BinFormat::Listing => out_format.write(&Listing::from_bytes(input)?)?,
+            BinFormat::Collections => out_format.write(&CollectionList::from_bytes(input)?)?,
+            BinFormat::Scores => out_format.write(&ScoreList::from_bytes(input)?)?,
+            BinFormat::Replay => out_format.write(&Replay::from_bytes(input)?)?,
         })
+    }
+
+    fn encode(self, in_format: TextFormat, input: &[u8]) -> Fallible<Vec<u8>> {
+        let mut out = Vec::new();
+        macro_rules! bintypes {
+            ($($variant:ident => $type:ty {$($args:tt)*},)*) => {{
+                match self {
+                    $(BinFormat::$variant => {
+                        let in_mem=in_format.read::<$type>(input,self)?;
+                        eprintln!("converting to a binary {:?} file", self);
+                        in_mem.to_writer(&mut out $($args)*)?;
+                    })*
+                }
+            }};
+        }
+        bintypes! {
+            Listing => Listing {},
+            Collections => CollectionList {},
+            Scores => ScoreList {},
+            Replay => Replay { , None },
+        }
+        Ok(out)
     }
 
     fn extension(self) -> &'static str {
@@ -98,14 +117,22 @@ impl TextFormat {
     }
 
     fn write<T: Serialize>(self, data: &T) -> Fallible<Vec<u8>> {
-        eprintln!("converting to plaintext");
+        eprintln!("converting to plaintext as a {:?} file", self);
         Ok(match self {
-            TextFormat::Ron => serde_json::to_vec_pretty(&data)?,
-            TextFormat::Json => ron::ser::to_string_pretty(&data, Default::default())?.into_bytes(),
+            TextFormat::Ron => ron::ser::to_string_pretty(&data, Default::default())?.into_bytes(),
+            TextFormat::Json => serde_json::to_vec_pretty(&data)?,
         })
     }
 
-    fn _extension(self) -> &'static str {
+    fn read<T: DeserializeOwned>(self, bytes: &[u8], binformat: BinFormat) -> Fallible<T> {
+        eprintln!("parsing plaintext as a {:?} file representing a binary {:?} file", self,binformat);
+        Ok(match self {
+            TextFormat::Ron => ron::de::from_bytes(bytes)?,
+            TextFormat::Json => serde_json::from_reader(bytes)?,
+        })
+    }
+
+    fn extension(self) -> &'static str {
         use self::TextFormat::*;
         match self {
             Ron => "ron",
@@ -168,41 +195,91 @@ impl Options {
             Some(i) => PathBuf::from(i),
             None => bail!("expected input path"),
         };
-        //If operation is missing, guess from input extension
-        let op = op.unwrap_or(if input.extension() == Some("db".as_ref()) || input.extension() == Some("osr".as_ref()) {
-            Operation::Decode
-        } else {
-            Operation::Encode
-        });
-        //Guess binformat from input
-        let bin_format = match bin_format {
-            Some(bf) => bf,
-            None => match (
-                input.extension().and_then(|s| s.to_str()).unwrap_or(""),
-                input.file_name().and_then(|s| s.to_str()).unwrap_or(""),
-            ) {
-                ("osr", _) => BinFormat::Replay,
-                ("db", "collection.db") => BinFormat::Collections,
-                ("db", "scores.db") => BinFormat::Scores,
-                ("db", _) => BinFormat::Listing,
-                (ext, _name) => bail!("failed to guess binary format for extension '{}'", ext),
-            },
-        };
-        //If output is missing, guess from input extension
-        output = match args.next() {
-            Some(o) => PathBuf::from(o),
-            None => input.with_extension(match op {
-                Operation::Decode => "txt",
-                Operation::Encode => bin_format.extension(),
-            }),
+        output = args.next();
+        //Guess binformat from input/output
+        macro_rules! concretize_bin_format {
+            ($bin_io:expr) => {{
+                match bin_format {
+                    Some(bf) => bf,
+                    None => {
+                        let bin_io = &$bin_io;
+                        match (
+                            bin_io.extension().and_then(|s| s.to_str()).unwrap_or(""),
+                            bin_io.file_stem().and_then(|s| s.to_str()).unwrap_or(""),
+                        ) {
+                            ("osr", _) => BinFormat::Replay,
+                            ("db", "collection") => BinFormat::Collections,
+                            ("db", "scores") => BinFormat::Scores,
+                            ("db", _) => BinFormat::Listing,
+                            (ext, _name) => {
+                                bail!("failed to guess binary format for extension '{}'", ext)
+                            }
+                        }
+                    }
+                }
+            }};
         };
         //Guess textformat from output, defaulting to ron
-        let text_format = text_format.unwrap_or_else(|| {
-            match output.extension().and_then(|s| s.to_str()).unwrap_or("") {
-                "json" => TextFormat::Json,
-                _ => TextFormat::Ron,
+        macro_rules! concretize_text_format {
+            ($text_io:expr) => {{
+                text_format.unwrap_or_else(|| {
+                    let text_io = &$text_io;
+                    match text_io.extension().and_then(|s| s.to_str()).unwrap_or("") {
+                        "json" => TextFormat::Json,
+                        _ => TextFormat::Ron,
+                    }
+                })
+            }};
+        }
+        //If operation is missing, guess from input extension
+        let op = op.unwrap_or(
+            if input.extension() == Some("db".as_ref()) || input.extension() == Some("osr".as_ref())
+            {
+                Operation::Decode
+            } else {
+                Operation::Encode
+            },
+        );
+        //Guess missing parameters
+        let (output, bin_format, text_format) = match op {
+            Operation::Decode => {
+                let bin_format = concretize_bin_format!(input);
+                let output = match output {
+                    Some(o) => PathBuf::from(o),
+                    None => input.with_extension(
+                        text_format
+                            .map(|format| format.extension())
+                            .unwrap_or("txt"),
+                    ),
+                };
+                let text_format = concretize_text_format!(output);
+                (output, bin_format, text_format)
             }
-        });
+            Operation::Encode => {
+                let text_format = concretize_text_format!(input);
+                let output = match output {
+                    Some(o) => PathBuf::from(o),
+                    None => {
+                        let ext = bin_format.map(|format| format.extension()).unwrap_or(
+                            match input.to_string_lossy() {
+                                ref name
+                                    if name.contains("collection")
+                                        || name.contains("scores")
+                                        || name.contains("osu!") =>
+                                {
+                                    "db"
+                                }
+                                _ => "osr",
+                            },
+                        );
+                        input.with_extension(ext)
+                    }
+                };
+                let bin_format = concretize_bin_format!(output);
+                (output, bin_format, text_format)
+            }
+        };
+        //Print help message if no argument was given
         if any_arg {
             Ok(Some(Options {
                 input,
@@ -219,8 +296,12 @@ impl Options {
 }
 
 fn decode(opt: &Options) -> Fallible<()> {
-    //Read, parse and reencode
-    let out = opt.bin_format.convert(opt.text_format, &opt.input)?;
+    //Read
+    eprintln!("reading binary from '{}'", opt.input.display());
+    let raw = fs::read(&opt.input)?;
+
+    //Parse and rewrite as plaintext
+    let out = opt.bin_format.decode(opt.text_format, &raw)?;
 
     //Write output to file
     eprintln!("writing plaintext to '{}'", opt.output.display());
@@ -229,8 +310,19 @@ fn decode(opt: &Options) -> Fallible<()> {
     Ok(())
 }
 
-fn encode(_opt: &Options) -> Fallible<()> {
-    bail!("encoding is currently not implemented by osu-db")
+fn encode(opt: &Options) -> Fallible<()> {
+    //Read
+    eprintln!("reading plaintext from '{}'", opt.input.display());
+    let plaintext = fs::read(&opt.input)?;
+
+    //Parse plaintext and reencode as binary
+    let out = opt.bin_format.encode(opt.text_format, &plaintext)?;
+
+    //Write output to file
+    eprintln!("writing binary output to '{}'", opt.output.display());
+    fs::write(&opt.output, &out)?;
+
+    Ok(())
 }
 
 fn run() -> Fallible<()> {

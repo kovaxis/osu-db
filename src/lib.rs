@@ -28,12 +28,31 @@ pub use crate::{collection::CollectionList, listing::Listing, replay::Replay, sc
 
 //Writer generator macro
 trait Writable {
+    type Args;
+    fn wr_args<W: Write>(&self, out: &mut W, args: Self::Args) -> io::Result<()>;
+}
+trait SimpleWritable
+where
+    Self: Writable,
+{
     fn wr<W: Write>(&self, out: &mut W) -> io::Result<()>;
+}
+impl<T> SimpleWritable for T
+where
+    T: Writable<Args = ()>,
+{
+    fn wr<W: Write>(&self, out: &mut W) -> io::Result<()> {
+        self.wr_args(out, ())
+    }
 }
 macro_rules! writer {
     ($type:ty [$this:ident, $out:ident] $code:expr) => {
+        writer!($type [$this, $out, _arg: ()] $code);
+    };
+    ($type:ty [$this:ident, $out:ident, $args:ident : $args_ty:ty] $code:expr) => {
         impl crate::Writable for $type {
-            fn wr<W: Write>(&self, $out: &mut W) -> io::Result<()> {
+            type Args=$args_ty;
+            fn wr_args<W: Write>(&self, $out: &mut W, $args: $args_ty) -> io::Result<()> {
                 let $this = self;
                 let () = $code;
                 Ok(())
@@ -45,23 +64,23 @@ macro_rules! writer {
 mod prelude {
     pub(crate) use crate::{
         boolean, byte, datetime, double, int, long, opt_string, short, single, Error, ModSet, Mode,
-        Writable,
+        PrefixedList, SimpleWritable, Writable,
     };
     pub(crate) use bit::BitIndex;
-    pub(crate) use chrono::{DateTime, Duration, NaiveDate, Utc, TimeZone};
-    pub(crate) use failure::{bail, Fail};
+    pub(crate) use chrono::{DateTime, Duration, TimeZone, Utc};
+    pub(crate) use failure::Fail;
     pub(crate) use nom::{
         call, complete, cond, count, do_parse, error_node_position, error_position, expr_res,
-        length_bytes, length_count, length_data, length_value, many0, map, map_opt, map_res, named,
-        named_args, opt, switch, tag, take, take_str, take_while, take_while1, try_parse, value,
-        Err as NomErr, ErrorKind as NomErrKind, IResult,
+        length_count, length_value, many0, map, map_opt, map_res, named, named_args, opt, switch,
+        tag, take, take_str, take_while, take_while1, value, Err as NomErr,
+        ErrorKind as NomErrKind, IResult,
     };
     #[cfg(feature = "ser-de")]
     pub use serde_derive::{Deserialize, Serialize};
     pub(crate) use std::{
-        fmt, fs,
-        io::{self, Write},
-        ops,
+        fmt,
+        fs::{self, File},
+        io::{self, BufWriter, Write},
         path::Path,
     };
     #[cfg(feature = "compression")]
@@ -136,6 +155,23 @@ writer!(f32 [this,out] this.to_bits().wr(out)?);
 writer!(f64 [this,out] this.to_bits().wr(out)?);
 writer!(bool [this,out] (if *this {1_u8} else {0_u8}).wr(out)?);
 
+//Writer for a list of items preceded by its length as an int
+struct PrefixedList<'a, T>(&'a [T]);
+impl<T> Writable for PrefixedList<'_, T>
+where
+    T: Writable,
+    T::Args: Clone,
+{
+    type Args = T::Args;
+    fn wr_args<W: Write>(&self, out: &mut W, args: T::Args) -> io::Result<()> {
+        (self.0.len() as u32).wr(out)?;
+        for item in self.0 {
+            item.wr_args(out, args.clone())?;
+        }
+        Ok(())
+    }
+}
+
 ///Get a datetime from an amount of "windows ticks":
 ///The amount of 100-nanosecond units since midnight of the date 0001/01/01.
 fn windows_ticks_to_datetime(ticks: u64) -> DateTime<Utc> {
@@ -148,8 +184,8 @@ named!(datetime<&[u8], DateTime<Utc>>, map!(long,windows_ticks_to_datetime));
 
 fn datetime_to_windows_ticks(datetime: &DateTime<Utc>) -> u64 {
     let epoch = Utc.ymd(1, 1, 1).and_hms(0, 0, 0);
-    let duration=datetime.signed_duration_since(epoch);
-    duration.num_nanoseconds().unwrap_or(0).max(0) as u64 / 100
+    let duration = datetime.signed_duration_since(epoch);
+    (duration*10).num_microseconds().unwrap_or(0).max(0) as u64
 }
 writer!(DateTime<Utc> [this,out] datetime_to_windows_ticks(this).wr(out)?);
 
@@ -172,7 +208,7 @@ named!(uleb<&[u8],usize>, do_parse!(
 writer!(usize [this,out] {
     let mut this=*this;
     loop {
-        let byte=this.bit_range(0..7) as u8;
+        let mut byte=this as u8;
         this>>=7;
         let continues={this!=0};
         byte.set_bit(7,continues);

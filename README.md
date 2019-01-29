@@ -1,9 +1,16 @@
 # osu-db
 
-`osu-db` is an osu binary file format encoder/decoder.
+`osu-db` is an osu! binary file format encoder/decoder, providing support for
+loading, modifying and saving the following osu! file formats:
+
+- `osu!.db`: The main beatmap information cache osu! uses.
+- `collection.db`: A list of collections and the beatmaps they contain.
+- `scores.db`: Overview of all user scores.
+- `.osr` files: Individual in-depth score data of a single replay.
+
 To use, simply add this line to your `Cargo.toml`:
 
-```
+```toml
 osu-db = "*"
 ```
 
@@ -14,7 +21,7 @@ standalone replay file).
 
 For example, to change all your osu!mania grades to `SS+`:
 
-```
+```rust
 use osu_db::listing::{Listing, Grade};
 
 // Load the listing to memory

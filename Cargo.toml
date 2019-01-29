@@ -1,0 +1,26 @@
+[package]
+name = "osu-db"
+version = "0.1.0"
+authors = ["negamartin"]
+edition = "2018"
+
+[workspace]
+members = ["conv"]
+
+[dependencies]
+nom = "4"
+chrono = "0.4"
+bit = "0.1"
+failure = "0.1"
+
+serde = { version = "1", optional = true }
+serde_derive = { version = "1", optional = true }
+
+xz2 = { version = "0.1", optional = true }
+
+[features]
+default = ["compression"]
+#Provides serde integration.
+ser-de = ["serde", "serde_derive", "chrono/serde"]
+#Provides replay data decompression.
+compression = ["xz2"]

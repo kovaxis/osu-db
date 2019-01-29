@@ -43,12 +43,12 @@ impl Listing {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Listing, Error> {
         Self::from_bytes(&fs::read(path)?)
     }
-    
+
     ///Write the listing to an arbitrary writer.
-    pub fn to_writer<W: Write>(&self,mut out: W) -> io::Result<()> {
+    pub fn to_writer<W: Write>(&self, mut out: W) -> io::Result<()> {
         self.wr(&mut out)
     }
-    
+
     ///Similar to `to_writer` but writes the listing to a file (ie. `osu!.db`).
     pub fn save<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?))
@@ -295,7 +295,6 @@ writer!(Listing [this, out] {
     this.mysterious_int.unwrap_or(0).wr(out)?;
 });
 
-
 named_args!(beatmap (version: u32) <&[u8], Beatmap>, length_value!(int, do_parse!(
     artist_ascii: opt_string >>
     artist_unicode: opt_string >>
@@ -501,16 +500,20 @@ fn build_option<T>(is_none: bool, content: T) -> Option<T> {
         Some(content)
     }
 }
-fn write_option<W: Write,T: SimpleWritable,D: SimpleWritable>(out: &mut W, opt: Option<T>, def: D) -> io::Result<()> {
+fn write_option<W: Write, T: SimpleWritable, D: SimpleWritable>(
+    out: &mut W,
+    opt: Option<T>,
+    def: D,
+) -> io::Result<()> {
     match opt {
         Some(t) => {
             false.wr(out)?;
             t.wr(out)?;
-        },
+        }
         None => {
             true.wr(out)?;
             def.wr(out)?;
-        },
+        }
     }
     Ok(())
 }

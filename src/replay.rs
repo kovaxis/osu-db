@@ -3,7 +3,10 @@
 use crate::prelude::*;
 
 #[cfg(feature = "compression")]
-use xz2::{stream::{Stream,LzmaOptions}, write::{XzDecoder,XzEncoder}};
+use xz2::{
+    stream::{LzmaOptions, Stream},
+    write::{XzDecoder, XzEncoder},
+};
 
 ///The LZMA compression level (a number between 0 and 9) used to write replay data when it is
 ///not otherwise specified.
@@ -76,16 +79,23 @@ impl Replay {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Replay, Error> {
         Self::from_bytes(&fs::read(path)?)
     }
-    
+
     ///Write the replay to an arbitrary writer, with the given compression level.
     ///
     ///If the compression level is `None` the arbitrary default
     ///`replay::DEFAULT_COMPRESSION_LEVEL` will be used.
     ///If the `compression` feature is disabled this argument has no effect.
-    pub fn to_writer<W: Write>(&self, mut out: W, compression_level: Option<u32>) -> io::Result<()> {
-        self.wr_args(&mut out, Some(compression_level.unwrap_or(DEFAULT_COMPRESSION_LEVEL)))
+    pub fn to_writer<W: Write>(
+        &self,
+        mut out: W,
+        compression_level: Option<u32>,
+    ) -> io::Result<()> {
+        self.wr_args(
+            &mut out,
+            Some(compression_level.unwrap_or(DEFAULT_COMPRESSION_LEVEL)),
+        )
     }
-    
+
     ///Similar to `to_writer` but writes the replay to an `osr` file.
     pub fn save<P: AsRef<Path>>(&self, path: P, compression_level: Option<u32>) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?), compression_level)
@@ -307,10 +317,11 @@ impl ManiaButtonSet {
 
 #[cfg(feature = "compression")]
 fn replay_data(raw: &[u8]) -> Result<Vec<Action>, Error> {
-    let mut decoder = XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
+    let mut decoder =
+        XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
     decoder.write_all(raw)?;
-    let data=decoder.finish()?;
-    let actions=actions(&data)?.1;
+    let data = decoder.finish()?;
+    let actions = actions(&data)?.1;
     Ok(actions)
 }
 #[cfg(not(feature = "compression"))]
@@ -319,10 +330,17 @@ fn replay_data(data: &[u8]) -> Result<Vec<u8>, Error> {
 }
 
 #[cfg(feature = "compression")]
-fn write_replay_data<W: Write>(actions: &Option<Vec<Action>>,out: &mut W,compression_level: u32) -> io::Result<()> {
+fn write_replay_data<W: Write>(
+    actions: &Option<Vec<Action>>,
+    out: &mut W,
+    compression_level: u32,
+) -> io::Result<()> {
     //Generate compressed replay data
-    let raw={
-        let mut encoder=XzEncoder::new_stream(Vec::new(),Stream::new_lzma_encoder(&LzmaOptions::new_preset(compression_level)?)?);
+    let raw = {
+        let mut encoder = XzEncoder::new_stream(
+            Vec::new(),
+            Stream::new_lzma_encoder(&LzmaOptions::new_preset(compression_level)?)?,
+        );
         if let Some(actions) = actions {
             for action in actions.iter() {
                 action.wr(&mut encoder)?;
@@ -330,12 +348,16 @@ fn write_replay_data<W: Write>(actions: &Option<Vec<Action>>,out: &mut W,compres
         }
         encoder.finish()?
     };
-    write_raw_replay_data(&raw,out,compression_level)
+    write_raw_replay_data(&raw, out, compression_level)
 }
 #[cfg(not(feature = "compression"))]
 use self::write_raw_replay_data as write_replay_data;
 
-fn write_raw_replay_data<W: Write>(raw: &Vec<u8>,out: &mut W,_compression_level: u32) -> io::Result<()> {
+fn write_raw_replay_data<W: Write>(
+    raw: &Vec<u8>,
+    out: &mut W,
+    _compression_level: u32,
+) -> io::Result<()> {
     //Prefix the data with its length
     (raw.len() as u32).wr(out)?;
     out.write_all(&raw)?;

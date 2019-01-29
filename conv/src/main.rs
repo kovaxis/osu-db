@@ -125,7 +125,10 @@ impl TextFormat {
     }
 
     fn read<T: DeserializeOwned>(self, bytes: &[u8], binformat: BinFormat) -> Fallible<T> {
-        eprintln!("parsing plaintext as a {:?} file representing a binary {:?} file", self,binformat);
+        eprintln!(
+            "parsing plaintext as a {:?} file representing a binary {:?} file",
+            self, binformat
+        );
         Ok(match self {
             TextFormat::Ron => ron::de::from_bytes(bytes)?,
             TextFormat::Json => serde_json::from_reader(bytes)?,

@@ -27,7 +27,7 @@ impl ScoreList {
     pub fn to_writer<W: Write>(&self, mut out: W) -> io::Result<()> {
         self.wr(&mut out)
     }
-    
+
     ///Similar to `to_writer` but writes the scores to a file.
     pub fn save<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?))

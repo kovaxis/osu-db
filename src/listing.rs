@@ -217,19 +217,60 @@ pub struct TimingPoint {
 }
 
 ///A grade obtained by passing a beatmap.
+///Also called a rank.
 ///
 ///Note that currently grades are just exposed as a raw byte.
 ///I am not sure of how do this bytes map to grades as of now.
 ///TODO: Figure out grades.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Grade(pub u8);
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Grade {
+    ///SS+, silver SS rank
+    ///Ie. only perfect scores with hidden mod enabled.
+    SSPlus,
+    ///S+, silver S rank
+    ///Ie. highest performance with hidden mod enabled.
+    SPlus,
+    ///SS rank
+    ///Ie. only perfect scores.
+    SS,
+    S,
+    A,
+    B,
+    C,
+    D,
+    ///No rank achieved yet.
+    Unplayed,
+}
 impl Grade {
     pub fn raw(self) -> u8 {
-        self.0
+        use self::Grade::*;
+        match self {
+            SSPlus => 0,
+            SPlus => 1,
+            SS => 2,
+            S => 3,
+            A => 4,
+            B => 5,
+            C => 6,
+            D => 7,
+            Unplayed => 9,
+        }
     }
     pub fn from_raw(raw: u8) -> Option<Grade> {
-        Some(Grade(raw))
+        use self::Grade::*;
+        Some(match raw {
+            0 => SSPlus,
+            1 => SPlus,
+            2 => SS,
+            3 => S,
+            4 => A,
+            5 => B,
+            6 => C,
+            7 => D,
+            9 => Unplayed,
+            _ => return None,
+        })
     }
 }
 

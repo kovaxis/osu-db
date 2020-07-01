@@ -188,7 +188,7 @@ fn datetime_to_windows_ticks(datetime: &DateTime<Utc>) -> u64 {
 }
 writer!(DateTime<Utc> [this,out] datetime_to_windows_ticks(this).wr(out)?);
 
-///The variable-length ULEB128 encoding used mainly for string lengths.
+// The variable-length ULEB128 encoding used mainly for string lengths.
 named!(uleb<&[u8],usize>, do_parse!(
     prelude: take_while!(|b: u8| b.bit(7)) >>
     finalizer: take!(1) >>
@@ -216,7 +216,7 @@ writer!(usize [this,out] {
     }
 });
 
-///An optional string.
+// An optional string.
 named!(opt_string<&[u8],Option<String>>, switch!(take!(1),
     &[0x00] => value!(None) |
     &[0x0b] => do_parse!(

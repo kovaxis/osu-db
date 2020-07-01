@@ -354,7 +354,7 @@ fn write_replay_data<W: Write>(
 use self::write_raw_replay_data as write_replay_data;
 
 fn write_raw_replay_data<W: Write>(
-    raw: &Vec<u8>,
+    raw: &[u8],
     out: &mut W,
     _compression_level: u32,
 ) -> io::Result<()> {
@@ -364,7 +364,7 @@ fn write_raw_replay_data<W: Write>(
     Ok(())
 }
 
-///Parse the plaintext list of actions.
+// Parse the plaintext list of actions.
 named!(actions<&[u8], Vec<Action>>,
     many0!(complete!(do_parse!(
         delta: number >>
@@ -387,7 +387,7 @@ writer!(Action [this,out] {
     write!(out, "{}|{}|{}|{},", this.delta,this.x,this.y,this.z)?;
 });
 
-///Parse a textually encoded decimal number.
+// Parse a textually encoded decimal number.
 named!(number<&[u8], f64>, do_parse!(
     sign: opt!(tag!(b"-")) >>
     whole: take_while1!(|b: u8| b.is_ascii_digit()) >>

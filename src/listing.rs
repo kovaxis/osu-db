@@ -3,9 +3,10 @@
 use crate::prelude::*;
 use std::hash::{Hash, Hasher};
 
-///In this `osu!.db` version several breaking changes were introduced.
+///In these `osu!.db` versions several breaking changes were introduced.
 ///While parsing, these changes are automatically handled depending on the `osu!.db` version.
-pub const BREAKING_CHANGE: u32 = 20140609;
+pub const CHANGE_20140609: u32 = 20140609;
+pub const CHANGE_20191106: u32 = 20191106;
 
 ///A structure representing the `osu!.db` binary database.
 ///This database contains pre-processed data and settings for all available osu! beatmaps.
@@ -30,9 +31,9 @@ pub struct Listing {
     ///The main bulk of information.
     pub beatmaps: Vec<Beatmap>,
 
-    ///Quoting the wiki: "Unknown Int, always seems to be 4".
-    ///However in my osu! installation it tends to be 0.
-    pub mysterious_int: Option<u32>,
+    /// User permissions (0 = None, 1 = Normal, 2 = Moderator, 4 = Supporter,
+    /// 8 = Friend, 16 = peppy, 32 = World Cup staff)
+    pub user_permissions: u32,
 }
 impl Listing {
     pub fn from_bytes(bytes: &[u8]) -> Result<Listing, Error> {
@@ -281,9 +282,9 @@ named!(listing<&[u8], Listing>, do_parse!(
     unlock_date: datetime >>
     player_name: opt_string >>
     beatmaps: length_count!(int, call!(beatmap, version)) >>
-    mysterious_int: opt!(complete!(int)) >>
+    user_permissions: int >>
     (Listing{
-        version,folder_count,unban_date: build_option(account_unlocked, unlock_date),player_name,beatmaps,mysterious_int,
+        version,folder_count,unban_date: build_option(account_unlocked, unlock_date),player_name,beatmaps,user_permissions,
     })
 ));
 writer!(Listing [this, out] {
@@ -292,10 +293,11 @@ writer!(Listing [this, out] {
     write_option(out,this.unban_date,0_u64)?;
     this.player_name.wr(out)?;
     PrefixedList(&this.beatmaps).wr_args(out,this.version)?;
-    this.mysterious_int.unwrap_or(0).wr(out)?;
+    this.user_permissions.wr(out)?;
 });
 
-named_args!(beatmap (version: u32) <&[u8], Beatmap>, length_value!(int, do_parse!(
+named_args!(beatmap (version: u32) <&[u8], Beatmap>, do_parse!(
+    beatmap_size: cond!(version<CHANGE_20191106, int) >>
     artist_ascii: opt_string >>
     artist_unicode: opt_string >>
     title_ascii: opt_string >>
@@ -347,7 +349,7 @@ named_args!(beatmap (version: u32) <&[u8], Beatmap>, length_value!(int, do_parse
     disable_storyboard: boolean >>
     disable_video: boolean >>
     visual_override: boolean >>
-    mysterious_short: cond!(version<BREAKING_CHANGE, short) >>
+    mysterious_short: cond!(version<CHANGE_20140609, short) >>
     mysterious_last_modified: int >>
     mania_scroll_speed: byte >>
     (Beatmap{
@@ -363,7 +365,8 @@ named_args!(beatmap (version: u32) <&[u8], Beatmap>, length_value!(int, do_parse
         mysterious_last_modified,mania_scroll_speed,
         last_played: build_option(unplayed,last_played),
     })
-)));
+));
+
 writer!(Beatmap [this,out,version: u32] {
     //Write beatmap into a temporary buffer, as beatmap length needs to be
     //known and prefixed
@@ -372,7 +375,7 @@ writer!(Beatmap [this,out,version: u32] {
         let out=&mut raw_buf;
         macro_rules! wr_difficulty_value {
             ($f32:expr) => {{
-                if version>=BREAKING_CHANGE {
+                if version>=CHANGE_20140609 {
                     $f32.wr(out)?;
                 }else{
                     ($f32 as u8).wr(out)?;
@@ -429,7 +432,7 @@ writer!(Beatmap [this,out,version: u32] {
         this.disable_storyboard.wr(out)?;
         this.disable_video.wr(out)?;
         this.visual_override.wr(out)?;
-        if version<BREAKING_CHANGE {
+        if version<CHANGE_20140609 {
             this.mysterious_short.unwrap_or(0).wr(out)?;
         }
         this.mysterious_last_modified.wr(out)?;
@@ -454,7 +457,7 @@ writer!(TimingPoint [this,out] {
     this.inherits.wr(out)?;
 });
 
-named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value!(version>=BREAKING_CHANGE),
+named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value!(version>=CHANGE_20140609),
     true => length_count!(int, do_parse!(
         tag!(&[0x08]) >>
         mods: map!(int, ModSet::from_bits) >>
@@ -465,7 +468,7 @@ named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value
     false => value!(Vec::new())
 ));
 writer!(Vec<(ModSet,f64)> [this,out,version: u32] {
-    if version>=BREAKING_CHANGE {
+    if version>=CHANGE_20140609 {
         PrefixedList(&this).wr(out)?;
     }
 });
@@ -480,7 +483,7 @@ writer!((ModSet,f64) [this,out] {
 ///After it they were stored as single floats.
 ///Accomodate this differences.
 fn difficulty_value(bytes: &[u8], version: u32) -> IResult<&[u8], f32> {
-    if version >= BREAKING_CHANGE {
+    if version >= CHANGE_20140609 {
         single(bytes)
     } else {
         byte(bytes).map(|(rem, b)| (rem, b as f32))

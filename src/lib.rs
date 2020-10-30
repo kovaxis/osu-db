@@ -70,7 +70,7 @@ mod prelude {
     pub(crate) use chrono::{DateTime, Duration, TimeZone, Utc};
     pub(crate) use failure::Fail;
     pub(crate) use nom::{
-        call, complete, cond, do_parse, expr_res, length_count, length_value, many0, map, map_opt,
+        call, complete, cond, do_parse, length_bytes, length_count, many0, map, map_opt, map_res,
         named, named_args, opt, switch, tag, take, take_str, take_while, take_while1, value,
         Err as NomErr, ErrorKind as NomErrKind, IResult,
     };
@@ -184,7 +184,8 @@ named!(datetime<&[u8], DateTime<Utc>>, map!(long,windows_ticks_to_datetime));
 fn datetime_to_windows_ticks(datetime: &DateTime<Utc>) -> u64 {
     let epoch = Utc.ymd(1, 1, 1).and_hms(0, 0, 0);
     let duration = datetime.signed_duration_since(epoch);
-    (duration * 10).num_microseconds().unwrap_or(0).max(0) as u64
+    let ticks_since: i64 = (duration * 10).num_microseconds().unwrap_or(0);
+    ticks_since.max(0) as u64
 }
 writer!(DateTime<Utc> [this,out] datetime_to_windows_ticks(this).wr(out)?);
 

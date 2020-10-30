@@ -8,8 +8,8 @@ use xz2::{
     write::{XzDecoder, XzEncoder},
 };
 
-///The LZMA compression level (a number between 0 and 9) used to write replay data when it is
-///not otherwise specified.
+/// The LZMA compression level (a number between 0 and 9) used to write replay data when it is
+/// not otherwise specified.
 pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 
 ///An osu! replay.
@@ -55,16 +55,18 @@ pub struct Replay {
     pub life_graph: Option<String>,
     ///When was the replay scored.
     pub timestamp: DateTime<Utc>,
-    ///Compressed replay data.
-    ///Only available on standalone `.osr` replays.
+    /// Decompressed replay data.
+    /// Only available on standalone `.osr` replays, and if the `compression` feature is enabled.
     ///
-    ///If feature `compression` is enabled, this is automatically decompressed
-    ///and parsed into a vector of `Action`s.
-    ///Otherwise, the raw compressed bytes are made available, but are typically unusable.
-    #[cfg(feature = "compression")]
+    /// When writing `.osr` files (and `.osr` files only), if the `compression` feature is enabled
+    /// and this field is `Some`, these actions will be compressed and written. Otherwise,
+    /// `raw_replay_data` will be written instead.
     pub replay_data: Option<Vec<Action>>,
-    #[cfg(not(feature = "compression"))]
-    pub replay_data: Option<Vec<u8>>,
+    /// Raw replay data, available on `.osr` files even if the `compression` feature is not enabled.
+    ///
+    /// When writing, this field is used as a fallback if `replay_data` is `None` or the
+    /// `compression` feature is disabled.
+    pub raw_replay_data: Option<Vec<u8>>,
     ///Online score id.
     ///Only has a useful value on replays embedded in a `ScoreList`.
     pub online_score_id: u64,
@@ -122,16 +124,15 @@ pub(crate) fn replay(bytes: &[u8], standalone: bool) -> IResult<&[u8], Replay> {
             >> mods: map!(int, ModSet::from_bits)
             >> life_graph: opt_string
             >> timestamp: datetime
-            >> replay_data:
+            >> raw_replay_data:
                 switch!(value!(standalone),
                     false => do_parse!(
                         tag!(&[0xff,0xff,0xff,0xff]) >>
                         (None)
                     ) |
-                    true => map!(length_value!(int, |bytes: &[u8]| {
-                        expr_res!(&b""[..], replay_data(bytes))
-                    }), |rd| Some(rd))
+                    true => map!(length_bytes!(int), |bytes| Some(bytes.to_vec()))
                 )
+            >> replay_data: map_res!(value!(raw_replay_data.as_deref()), parse_replay_data)
             >> online_score_id: long
             >> (Replay {
                 mode,
@@ -152,6 +153,7 @@ pub(crate) fn replay(bytes: &[u8], standalone: bool) -> IResult<&[u8], Replay> {
                 life_graph,
                 timestamp,
                 replay_data,
+                raw_replay_data,
                 online_score_id,
             })
     )
@@ -175,7 +177,12 @@ writer!(Replay [this,out,compress_data: Option<u32>] {
     this.life_graph.wr(out)?;
     this.timestamp.wr(out)?;
     if let Some(compression_level) = compress_data {
-        write_replay_data(&this.replay_data,out,compression_level)?;
+        write_replay_data(
+            this.replay_data.as_deref(),
+            this.raw_replay_data.as_deref(),
+            out,
+            compression_level
+        )?;
     }else{
         0xffffffff_u32.wr(out)?;
     }
@@ -316,48 +323,43 @@ impl ManiaButtonSet {
 }
 
 #[cfg(feature = "compression")]
-fn replay_data(raw: &[u8]) -> Result<Vec<Action>, Error> {
-    let mut decoder =
-        XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
-    decoder.write_all(raw)?;
-    let data = decoder.finish()?;
-    let actions = actions(&data)?.1;
-    Ok(actions)
-}
-#[cfg(not(feature = "compression"))]
-fn replay_data(data: &[u8]) -> Result<Vec<u8>, Error> {
-    Ok(data.to_vec())
+fn parse_replay_data(raw: Option<&[u8]>) -> Result<Option<Vec<Action>>, Error> {
+    if let Some(raw) = raw {
+        let mut decoder =
+            XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
+        decoder.write_all(raw)?;
+        let data = decoder.finish()?;
+        let actions = actions(&data)?.1;
+        Ok(Some(actions))
+    } else {
+        Ok(None)
+    }
 }
 
-#[cfg(feature = "compression")]
 fn write_replay_data<W: Write>(
-    actions: &Option<Vec<Action>>,
+    actions: Option<&[Action]>,
+    raw: Option<&[u8]>,
     out: &mut W,
     compression_level: u32,
 ) -> io::Result<()> {
-    //Generate compressed replay data
-    let raw = {
-        let mut encoder = XzEncoder::new_stream(
-            Vec::new(),
-            Stream::new_lzma_encoder(&LzmaOptions::new_preset(compression_level)?)?,
-        );
+    let mut raw = raw.as_deref();
+    let compress_buf;
+    //Compress if it's enabled and available
+    #[cfg(feature = "compression")]
+    {
         if let Some(actions) = actions {
+            let mut encoder = XzEncoder::new_stream(
+                Vec::new(),
+                Stream::new_lzma_encoder(&LzmaOptions::new_preset(compression_level)?)?,
+            );
             for action in actions.iter() {
                 action.wr(&mut encoder)?;
             }
+            compress_buf = encoder.finish()?;
+            raw = Some(&compress_buf[..]);
         }
-        encoder.finish()?
-    };
-    write_raw_replay_data(&raw, out, compression_level)
-}
-#[cfg(not(feature = "compression"))]
-use self::write_raw_replay_data as write_replay_data;
-
-fn write_raw_replay_data<W: Write>(
-    raw: &[u8],
-    out: &mut W,
-    _compression_level: u32,
-) -> io::Result<()> {
+    }
+    let raw = raw.unwrap_or_default();
     //Prefix the data with its length
     (raw.len() as u32).wr(out)?;
     out.write_all(&raw)?;

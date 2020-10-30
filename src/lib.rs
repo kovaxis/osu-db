@@ -10,13 +10,27 @@
 //! You can default to an empty string by using `string.unwrap_or_default()`, which does no
 //! allocations and is very cheap.
 //!
+//! # A note on features and replays
+//!
+//! By default, replay data will be decompressed and parsed, using the `xz2` dependency.
+//! To disable this behaviour and remove the dependency on `xz2`, disable the `compression` feature:
+//!
+//! ```toml
+//! osu-db = { version = "*", default-features = false }
+//! ```
+//!
+//! When `compression` is disabled, the `Replay::replay_data` field will always be `None`, and will
+//! be ignored when writing.
+//! In any case, the `Replay::raw_replay_data` field is always available.
+//!
 //! # A note on future-proofness
 //!
 //! Osu `.db` formats are used internally by osu!, and are not intended to be shared.
 //! There does not seem to be any public contract on breaking changes, and breaking changes
-//! already occured once on 2014, so this library might not work with future versions of osu!.
+//! already occured twice (on 2014 and 2019), so this library might not work with future versions
+//! of osu!.
 //!
-//! It is currently guaranteed to work on osu! `.db` versions up to at least 20181221.
+//! It is currently guaranteed to work on osu! `.db` versions up to at least `20201017`.
 //! The current implementation might work for a long time, or break tomorrow.
 
 //Because otherwise compiling the large beatmap nom combinator fails

@@ -19,13 +19,13 @@ After that you will want to use the different load/save functions on the
 `CollectionList` (in-game beatmap collections) or `Replay` (a single in-depth
 standalone replay file).
 
-For example, to change all your osu!mania grades to `SS+`:
+For example, to change all of your osu!mania grades to `SS+`:
 
 ```rust
 use osu_db::listing::{Listing, Grade};
 
 // Load the listing to memory
-let mut listing=Listing::from_file("osu!.db").unwrap();
+let mut listing = Listing::from_file("osu!.db").unwrap();
 
 // Modify listing in-place
 for beatmap in listing.beatmaps.iter_mut() {
@@ -38,4 +38,4 @@ listing.save("osu!.db").unwrap();
 
 More details in the crate documentation.
 
-`osu-db` has been tested to work with `osu!stable` databases of at least version 
+`osu-db` has been tested to work with `osu!stable` binaries of at least version `20201017`.

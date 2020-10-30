@@ -6,11 +6,12 @@ edition = "2018"
 
 # Crates.io package info
 description = "Reading and writing of osu! binary files: `osu!.db`, `collection.db`, `scores.db` and `.osr` replay files."
-repository = "https://github.com/negamartin/osu-db"
 readme = "README.md"
+repository = "https://github.com/negamartin/osu-db"
+license = "Unlicense"
 keywords = ["osu"]
 categories = ["encoding", "parser-implementations"]
-license = "Unlicense"
+include = ["Cargo.toml", "src", "LICENSE"]
 
 [workspace]
 members = ["conv"]

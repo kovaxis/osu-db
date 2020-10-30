@@ -2,8 +2,8 @@
 //!
 //! **NOTE**: Currently encoding from plaintext is unsupported by osu-db.
 
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use chrono::{DateTime, Utc};
-use failure::{bail, ensure, err_msg, format_err, AsFail, Fallible, ResultExt};
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use osu_db::{
     collection::Collection,
@@ -43,19 +43,6 @@ Available formats:
     `bin`, `ron`, `json`: Encoding format.
 Note that encodings and filetypes are not exclusive (eg. `osu!.db?listing?bin` is a valid path).
 "#;
-
-struct PrintErr<F: AsFail>(pub F);
-impl<F: AsFail> fmt::Display for PrintErr<F> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let fail = self.0.as_fail();
-        write!(f, "{}", fail)?;
-        for cause in fail.iter_causes() {
-            writeln!(f)?;
-            write!(f, "  caused by: {}", cause)?;
-        }
-        Ok(())
-    }
-}
 
 /// Rank a beatmap by correctness, such that if there is a collision one can be chosen over the
 /// other.
@@ -254,7 +241,7 @@ enum FileFormat {
     Json,
 }
 
-fn read(ty: FileType, fmt: FileFormat, bytes: &[u8]) -> Fallible<InMemory> {
+fn read(ty: FileType, fmt: FileFormat, bytes: &[u8]) -> Result<InMemory> {
     macro_rules! file_types {
         ($($name:ident [$ty:ty]),*) => {{
             match ty {
@@ -282,7 +269,7 @@ fn read(ty: FileType, fmt: FileFormat, bytes: &[u8]) -> Fallible<InMemory> {
     ))
 }
 
-fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Fallible<InMemory> {
+fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Result<InMemory> {
     let inputs = inputs.into_iter().collect::<Vec<_>>();
     let mut ty = None;
     ensure!(
@@ -291,7 +278,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
             .all(|in_mem| { in_mem.file_type() == *ty.get_or_insert(in_mem.file_type()) }),
         "cannot merge different types of files"
     );
-    let ty = ty.ok_or(err_msg("zero inputs"))?;
+    let ty = ty.ok_or(anyhow!("zero inputs"))?;
     if inputs.len() > 1 {
         println!("merging {} {:?} files", inputs.len(), ty);
     }
@@ -677,7 +664,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
     Ok(out)
 }
 
-fn write(fmt: FileFormat, data: InMemory) -> Fallible<Vec<u8>> {
+fn write(fmt: FileFormat, data: InMemory) -> Result<Vec<u8>> {
     macro_rules! file_types {
         ($($name:ident [$($args:tt)*]),*) => {{
             match data {
@@ -730,7 +717,7 @@ fn guess_read_input(
     in_bytes: &[u8],
     in_ty: Option<FileType>,
     in_fmt: Option<FileFormat>,
-) -> Fallible<(InMemory, FileFormat)> {
+) -> Result<(InMemory, FileFormat)> {
     let (in_name, in_ext) = unpack_path(Some(in_path));
     //Guess input
     let mut check_order = vec![];
@@ -802,7 +789,7 @@ fn guess_read_input(
         for (fmt, ty, err) in errors.iter() {
             write!(msg, "\n  not a ({:?}/{:?}) file: {}", ty, fmt, err).unwrap();
         }
-        err_msg(msg)
+        anyhow!(msg)
     })?;
     Ok((in_data, in_fmt))
 }
@@ -882,15 +869,13 @@ struct Options {
     merge_op: MergeOp,
 }
 impl Options {
-    fn parse() -> Fallible<Option<Options>> {
+    fn parse() -> Result<Option<Options>> {
         let mut inputs = Vec::new();
         let mut output = (None, None, None);
         let mut merge_op = MergeOp::Or;
 
         let mut args = env::args().skip(1);
-        fn parse_path(
-            mut path: String,
-        ) -> Fallible<(PathBuf, Option<FileType>, Option<FileFormat>)> {
+        fn parse_path(mut path: String) -> Result<(PathBuf, Option<FileType>, Option<FileFormat>)> {
             let mut ty = None;
             let mut fmt = None;
             while let Some(sep) = path.rfind('?') {
@@ -916,7 +901,7 @@ impl Options {
                 "-h" | "--help" => print!("{}", HELP_MSG),
                 "-i" | "--input" => {
                     let (path, ty, fmt) =
-                        parse_path(args.next().ok_or(err_msg("expected input path"))?)?;
+                        parse_path(args.next().ok_or(anyhow!("expected input path"))?)?;
                     inputs.push(InputOpt { path, ty, fmt });
                 }
                 "-o" | "--output" => {
@@ -924,7 +909,7 @@ impl Options {
                         bail!("too many outputs");
                     }
                     let (path, ty, fmt) =
-                        parse_path(args.next().ok_or(err_msg("expected output path"))?)?;
+                        parse_path(args.next().ok_or(anyhow!("expected output path"))?)?;
                     output = (Some(path), ty, fmt);
                 }
                 "-u" | "--union" => {
@@ -936,7 +921,7 @@ impl Options {
                 "-d" | "--difference" => {
                     merge_op = MergeOp::Diff;
                 }
-                _ => bail!(format_err!("unknown option '{}'", opt)),
+                _ => bail!(anyhow!("unknown option '{}'", opt)),
             }
         }
         //Error on missing inputs
@@ -964,7 +949,7 @@ impl Options {
     }
 }
 
-fn run() -> Fallible<()> {
+fn run() -> Result<()> {
     let opt = match Options::parse()? {
         Some(opt) => opt,
         None => return Ok(()),
@@ -974,7 +959,7 @@ fn run() -> Fallible<()> {
     let inputs = opt
         .inputs
         .iter()
-        .map(|InputOpt { path, ty, fmt }| -> Fallible<_> {
+        .map(|InputOpt { path, ty, fmt }| -> Result<_> {
             println!(
                 "reading input at \"{}\" with format {:?}/{:?}",
                 path.display(),
@@ -982,7 +967,7 @@ fn run() -> Fallible<()> {
                 fmt
             );
             let bytes = fs::read(path)
-                .with_context(|_| format_err!("failed to read input at \"{}\"", path.display()))?;
+                .with_context(|| anyhow!("failed to read input at \"{}\"", path.display()))?;
             let (in_mem, fmt) = guess_read_input(path, &bytes, *ty, *fmt)?;
             println!(
                 "  determined file format to be {:?}/{:?}",
@@ -991,7 +976,7 @@ fn run() -> Fallible<()> {
             );
             Ok((in_mem, fmt))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>>>()?;
     ensure!(!inputs.is_empty(), "got no inputs");
 
     //Get output type and location
@@ -1023,9 +1008,8 @@ fn run() -> Fallible<()> {
 
     //Write output
     println!("writing output to \"{}\"", out_path.display());
-    fs::write(&out_path, &out_bytes[..]).with_context(|_| {
-        format_err!("failed to write output file at \"{}\"", out_path.display())
-    })?;
+    fs::write(&out_path, &out_bytes[..])
+        .with_context(|| anyhow!("failed to write output file at \"{}\"", out_path.display()))?;
 
     Ok(())
 }
@@ -1033,6 +1017,6 @@ fn run() -> Fallible<()> {
 pub fn main() {
     match run() {
         Ok(()) => {}
-        Err(err) => println!("fatal error: {}", PrintErr(err)),
+        Err(err) => println!("fatal error: {:#}", err),
     }
 }

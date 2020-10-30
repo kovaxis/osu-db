@@ -50,7 +50,9 @@ pub struct Replay {
     /// When was the replay scored.
     pub timestamp: DateTime<Utc>,
     /// Decompressed replay data.
-    /// Only available on standalone `.osr` replays, and if the `compression` feature is enabled.
+    ///
+    /// Only available on standalone `.osr` replays, and if the `compression` feature is enabled
+    /// (enabled by default).
     ///
     /// When writing `.osr` files (and `.osr` files only), if the `compression` feature is enabled
     /// and this field is `Some`, these actions will be compressed and written. Otherwise,
@@ -257,13 +259,13 @@ impl StandardButtonSet {
 
     /// Check whether the combination lists the button as pressed.
     pub fn is_down(&self, button: StandardButton) -> bool {
-        self.bits().bit(button.raw() as usize)
+        self.bits().bit(button.raw() as u32)
     }
 
     /// Set the pressed status of the given button.
     pub fn set_down(&self, button: StandardButton, is_down: bool) -> StandardButtonSet {
         let mut bits = self.bits();
-        bits.set_bit(button.raw() as usize, is_down);
+        bits.set_bit(button.raw() as u32, is_down);
         StandardButtonSet::from_bits(bits)
     }
     /// Set the pressed status of a button to `true`.
@@ -296,22 +298,22 @@ impl ManiaButtonSet {
     }
 
     /// Check whether a certain key is pressed.
-    pub fn is_down(&self, button: usize) -> bool {
+    pub fn is_down(&self, button: u32) -> bool {
         self.bits().bit(button)
     }
 
     /// Set the pressed status of a key.
-    pub fn set_down(&self, button: usize, is_down: bool) -> ManiaButtonSet {
+    pub fn set_down(&self, button: u32, is_down: bool) -> ManiaButtonSet {
         let mut bits = self.bits();
         bits.set_bit(button, is_down);
         ManiaButtonSet::from_bits(bits)
     }
     /// Set the pressed status of a key to `true`.
-    pub fn press(&self, button: usize) -> ManiaButtonSet {
+    pub fn press(&self, button: u32) -> ManiaButtonSet {
         self.set_down(button, true)
     }
     /// Set the pressed status of a key to `false`.
-    pub fn release(&self, button: usize) -> ManiaButtonSet {
+    pub fn release(&self, button: u32) -> ManiaButtonSet {
         self.set_down(button, false)
     }
 }

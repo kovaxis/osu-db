@@ -19,8 +19,6 @@ members = ["conv"]
 [dependencies]
 nom = "4"
 chrono = "0.4"
-bit = "0.1"
-failure = "0.1"
 
 serde = { version = "1", optional = true }
 serde_derive = { version = "1", optional = true }

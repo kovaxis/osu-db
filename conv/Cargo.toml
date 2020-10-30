@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 osu-db = { path = "..", features = ["ser-de"] }
-failure = "0.1"
 
+anyhow = "1"
 serde = "1"
 ron = "0.6"
 serde_json = "1"

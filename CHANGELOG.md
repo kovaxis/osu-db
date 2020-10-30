@@ -13,6 +13,7 @@ TODO:
     always available, but is only `Some` when the `compression` feature is enabled. The
     `raw_replay_data` field is always available, instead.
 - `PartialEq` is now implemented everywhere.
+- Moved from `failure` to `std::error::Error`.
 
 # 0.1
 

@@ -19,9 +19,12 @@
 //! osu-db = { version = "*", default-features = false }
 //! ```
 //!
-//! When `compression` is disabled, the `Replay::replay_data` field will always be `None`, and will
-//! be ignored when writing.
-//! In any case, the `Replay::raw_replay_data` field is always available.
+//! When `compression` is disabled, the
+//! [`Replay::replay_data`](replay/struct.Replay.html#structfield.replay_data) field will always be
+//! `None`, and will be ignored when writing.
+//! In any case, the
+//! [`Replay::raw_replay_data`](replay/struct.Replay.html#structfield.raw_replay_data) field is
+//! always available.
 //!
 //! # A note on future-proofness
 //!
@@ -77,12 +80,10 @@ macro_rules! writer {
 
 mod prelude {
     pub(crate) use crate::{
-        boolean, byte, datetime, double, int, long, opt_string, short, single, Error, ModSet, Mode,
-        PrefixedList, SimpleWritable, Writable,
+        boolean, byte, datetime, double, int, long, opt_string, short, single, Bit, Error, ModSet,
+        Mode, PrefixedList, SimpleWritable, Writable,
     };
-    pub(crate) use bit::BitIndex;
     pub(crate) use chrono::{DateTime, Duration, TimeZone, Utc};
-    pub(crate) use failure::Fail;
     pub(crate) use nom::{
         call, complete, cond, do_parse, length_bytes, length_count, many0, map, map_opt, map_res,
         named, named_args, opt, switch, tag, take, take_str, take_while, take_while1, value,
@@ -94,10 +95,11 @@ mod prelude {
         fmt,
         fs::{self, File},
         io::{self, BufWriter, Write},
+        ops,
         path::Path,
     };
     #[cfg(feature = "compression")]
-    pub(crate) use xz2::stream::Error as LzmaError;
+    pub use xz2::stream::Error as LzmaError;
 }
 
 pub mod collection;
@@ -109,6 +111,7 @@ pub mod score;
 pub enum Error {
     Parse(NomErrKind),
     Io(io::Error),
+    /// Only available with the `compression` feature enabled.
     #[cfg(feature = "compression")]
     Compression(LzmaError),
 }
@@ -124,13 +127,13 @@ impl fmt::Display for Error {
         }
     }
 }
-impl Fail for Error {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Parse(_err) => None,
-            Error::Io(err) => Some(err as &dyn Fail),
+            Error::Io(err) => Some(err as &dyn std::error::Error),
             #[cfg(feature = "compression")]
-            Error::Compression(err) => Some(err as &dyn Fail),
+            Error::Compression(err) => Some(err as &dyn std::error::Error),
         }
     }
 }
@@ -150,6 +153,38 @@ impl From<LzmaError> for Error {
         Error::Compression(err)
     }
 }
+
+trait Bit {
+    fn bit(&self, pos: u32) -> bool;
+    fn bit_range(&self, pos: ops::Range<u32>) -> Self;
+    fn set_bit(&mut self, pos: u32, val: bool);
+    fn set_bit_range(&mut self, pos: ops::Range<u32>, val: Self);
+}
+macro_rules! impl_bit {
+    (@ $ty:ty) => {
+        impl Bit for $ty {
+            fn bit(&self, pos: u32) -> bool {
+                (*self & 1 << pos) != 0
+            }
+            fn bit_range(&self, pos: ops::Range<u32>) -> Self {
+                (*self & ((1<<pos.end)-1)) >> pos.start
+            }
+            fn set_bit(&mut self, pos: u32, val: bool) {
+                *self = (*self & !(1<<pos)) | ((val as Self)<<pos);
+            }
+            fn set_bit_range(&mut self, pos: ops::Range<u32>, val: Self) {
+                let mask = ((1<<(pos.end-pos.start))-1) << pos.start;
+                *self = (*self & !mask) | ((val<<pos.start)&mask);
+            }
+        }
+    };
+    ($($ty:ty),*) => {
+        $(
+            impl_bit!(@ $ty);
+        )*
+    }
+}
+impl_bit!(u8, u16, u32, u64);
 
 //Common fixed-size osu `.db` primitives.
 use nom::le_f32 as single;
@@ -225,7 +260,7 @@ writer!(usize [this,out] {
         let mut byte=this as u8;
         this>>=7;
         let continues={this!=0};
-        byte.set_bit(7,continues);
+        byte.set_bit(7, continues);
         byte.wr(out)?;
         if !continues {break}
     }
@@ -385,13 +420,13 @@ impl ModSet {
 
     /// Check whether the set contains the given mod.
     pub fn contains(&self, m: Mod) -> bool {
-        self.bits().bit(m.raw() as usize)
+        self.bits().bit(m.raw() as u32)
     }
 
     /// Make a new set of mods with the given mod included or not included.
     pub fn set(&self, m: Mod, include: bool) -> ModSet {
         let mut bits = self.bits();
-        bits.set_bit(m.raw() as usize, include);
+        bits.set_bit(m.raw() as u32, include);
         ModSet::from_bits(bits)
     }
 

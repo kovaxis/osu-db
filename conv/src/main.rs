@@ -293,7 +293,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
     );
     let ty = ty.ok_or(err_msg("zero inputs"))?;
     if inputs.len() > 1 {
-        eprintln!("merging {} {:?} files", inputs.len(), ty);
+        println!("merging {} {:?} files", inputs.len(), ty);
     }
     macro_rules! prepare {
         ($name:ident => |$val:ident| $get_list:expr) => {{
@@ -352,11 +352,11 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
             let mut no_hash = Vec::new();
             let mut folders = HashSet::default();
             for (i, listing) in listings.into_iter().enumerate() {
-                eprintln!("processing listing {}", i);
-                eprintln!("  version: {}", listing.version);
-                eprintln!("  beatmaps: {}", listing.beatmaps.len());
-                eprintln!("  folder_count: {}", listing.folder_count);
-                eprintln!(
+                println!("processing listing {}", i);
+                println!("  version: {}", listing.version);
+                println!("  beatmaps: {}", listing.beatmaps.len());
+                println!("  folder_count: {}", listing.folder_count);
+                println!(
                     "  player_name: '{}'",
                     listing.player_name.unwrap_or_default()
                 );
@@ -364,7 +364,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                     if let Some(fname) = &bm.folder_name {
                         folders.insert(fname.clone());
                     } else {
-                        eprintln!(
+                        println!(
                             "  WARNING: beatmap {:?} has no folder name",
                             (&bm.title_ascii, &bm.difficulty_name, &bm.file_name)
                         );
@@ -398,7 +398,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                             by_hash.insert(hash.clone(), (meta, bm));
                         }
                     } else {
-                        eprintln!(
+                        println!(
                             "  WARNING: beatmap {:?} has no hash",
                             (&bm.title_ascii, &bm.difficulty_name, &bm.folder_name)
                         );
@@ -412,7 +412,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                 .chain(no_hash.into_iter())
                 .collect();
             out.folder_count = folders.len() as u32;
-            eprintln!(
+            println!(
                 "output listing has {} beatmaps and {} folders",
                 out.beatmaps.len(),
                 out.folder_count
@@ -424,13 +424,13 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
             let mut by_name: HashMap<String, (i32, HashMap<String, i32>)> = HashMap::default();
             //Merge everything into hashmaps
             for (i, list) in lists.into_iter().enumerate() {
-                eprintln!("processing collection listing {}", i);
-                eprintln!("  version: {}", list.version);
-                eprintln!("  collections: {}", list.collections.len());
+                println!("processing collection listing {}", i);
+                println!("  version: {}", list.version);
+                println!("  collections: {}", list.collections.len());
                 for (j, collection) in list.collections.into_iter().enumerate() {
                     if let Some(collection_name) = collection.name {
-                        eprintln!("  processing collection {} '{}'", j, collection_name);
-                        eprintln!("    beatmaps: {}", collection.beatmap_hashes.len());
+                        println!("  processing collection {} '{}'", j, collection_name);
+                        println!("    beatmaps: {}", collection.beatmap_hashes.len());
                         let (collection_meta, out_collection) =
                             by_name.entry(collection_name).or_default();
                         *collection_meta += merge_meta_add(i);
@@ -465,12 +465,12 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                 }
             }
             //Print info
-            eprintln!(
+            println!(
                 "output collection list has {} collections",
                 out.collections.len()
             );
             for collection in out.collections.iter() {
-                eprintln!(
+                println!(
                     "  '{}': {} beatmaps",
                     collection.name.as_deref().unwrap_or_default(),
                     collection.beatmap_hashes.len()
@@ -605,10 +605,10 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                 }
             }
             for (i, list) in lists.into_iter().enumerate() {
-                eprintln!("processing scorelist {}", i);
-                eprintln!("  version: {}", list.version);
-                eprintln!("  beatmaps: {}", list.beatmaps.len());
-                eprintln!(
+                println!("processing scorelist {}", i);
+                println!("  version: {}", list.version);
+                println!("  beatmaps: {}", list.beatmaps.len());
+                println!(
                     "  total scores: {}",
                     list.beatmaps
                         .iter()
@@ -628,7 +628,7 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                             *entry.or_default() += merge_meta_add(i);
                         }
                     } else {
-                        eprintln!("    WARNING: beatmap {} has no hash, skipping", j);
+                        println!("    WARNING: beatmap {} has no hash, skipping", j);
                     }
                 }
             }
@@ -658,9 +658,9 @@ fn merge(merge_op: MergeOp, inputs: impl IntoIterator<Item = InMemory>) -> Falli
                 }
             }
             //Print info
-            eprintln!("output scorelist:");
-            eprintln!("  beatmaps: {}", out.beatmaps.len());
-            eprintln!(
+            println!("output scorelist:");
+            println!("  beatmaps: {}", out.beatmaps.len());
+            println!(
                 "  total scores: {}",
                 out.beatmaps.iter().map(|bm| bm.scores.len()).sum::<usize>()
             );
@@ -913,7 +913,7 @@ impl Options {
             any_arg = true;
             //Check option
             match &opt[..] {
-                "-h" | "--help" => eprint!("{}", HELP_MSG),
+                "-h" | "--help" => print!("{}", HELP_MSG),
                 "-i" | "--input" => {
                     let (path, ty, fmt) =
                         parse_path(args.next().ok_or(err_msg("expected input path"))?)?;
@@ -945,7 +945,7 @@ impl Options {
             .iter()
             .all(|InputOpt { path, .. }| path.extension() == inputs[0].path.extension())
         {
-            eprintln!("warning: inputs should have matching extensions?");
+            println!("warning: inputs should have matching extensions?");
         }
         //Print help message if no arguments were given
         if any_arg {
@@ -958,7 +958,7 @@ impl Options {
                 output_fmt,
             }))
         } else {
-            eprint!("{}", HELP_MSG);
+            print!("{}", HELP_MSG);
             Ok(None)
         }
     }
@@ -975,7 +975,7 @@ fn run() -> Fallible<()> {
         .inputs
         .iter()
         .map(|InputOpt { path, ty, fmt }| -> Fallible<_> {
-            eprintln!(
+            println!(
                 "reading input at \"{}\" with format {:?}/{:?}",
                 path.display(),
                 ty,
@@ -984,7 +984,7 @@ fn run() -> Fallible<()> {
             let bytes = fs::read(path)
                 .with_context(|_| format_err!("failed to read input at \"{}\"", path.display()))?;
             let (in_mem, fmt) = guess_read_input(path, &bytes, *ty, *fmt)?;
-            eprintln!(
+            println!(
                 "  determined file format to be {:?}/{:?}",
                 in_mem.file_type(),
                 fmt
@@ -1012,7 +1012,7 @@ fn run() -> Fallible<()> {
     )?;
 
     //Serialize output
-    eprintln!("serializing as a {:?}/{:?} file", out_ty, out_fmt);
+    println!("serializing as a {:?}/{:?} file", out_ty, out_fmt);
     ensure!(
         merged.file_type() == out_ty,
         "cannot convert input filetype to output filetype ({:?} -> {:?})",
@@ -1022,7 +1022,7 @@ fn run() -> Fallible<()> {
     let out_bytes = write(out_fmt, merged)?;
 
     //Write output
-    eprintln!("writing output to \"{}\"", out_path.display());
+    println!("writing output to \"{}\"", out_path.display());
     fs::write(&out_path, &out_bytes[..]).with_context(|_| {
         format_err!("failed to write output file at \"{}\"", out_path.display())
     })?;
@@ -1033,6 +1033,6 @@ fn run() -> Fallible<()> {
 pub fn main() {
     match run() {
         Ok(()) => {}
-        Err(err) => eprintln!("fatal error: {}", PrintErr(err)),
+        Err(err) => println!("fatal error: {}", PrintErr(err)),
     }
 }

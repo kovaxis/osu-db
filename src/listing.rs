@@ -3,32 +3,32 @@
 use crate::prelude::*;
 use std::hash::Hash;
 
-///In these `osu!.db` versions several breaking changes were introduced.
-///While parsing, these changes are automatically handled depending on the `osu!.db` version.
+/// In these `osu!.db` versions several breaking changes were introduced.
+/// While parsing, these changes are automatically handled depending on the `osu!.db` version.
 pub const CHANGE_20140609: u32 = 20140609;
 pub const CHANGE_20191106: u32 = 20191106;
 
-///A structure representing the `osu!.db` binary database.
-///This database contains pre-processed data and settings for all available osu! beatmaps.
+/// A structure representing the `osu!.db` binary database.
+/// This database contains pre-processed data and settings for all available osu! beatmaps.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Listing {
-    ///The `osu!.db` version number.
-    ///This is a decimal number in the form `YYYYMMDD` (eg. `20150203`).
+    /// The `osu!.db` version number.
+    /// This is a decimal number in the form `YYYYMMDD` (eg. `20150203`).
     pub version: u32,
 
-    ///The amount of folders within the "Songs" directory.
-    ///Probably for quick checking of changes within the directory.
+    /// The amount of folders within the "Songs" directory.
+    /// Probably for quick checking of changes within the directory.
     pub folder_count: u32,
 
-    ///Whether the account is locked/banned, and when will be it be unbanned.
+    /// Whether the account is locked/banned, and when will be it be unbanned.
     pub unban_date: Option<DateTime<Utc>>,
 
-    ///Self-explanatory.
+    /// Self-explanatory.
     pub player_name: Option<String>,
 
-    ///All stored beatmaps and the information stored about them.
-    ///The main bulk of information.
+    /// All stored beatmaps and the information stored about them.
+    /// The main bulk of information.
     pub beatmaps: Vec<Beatmap>,
 
     /// User permissions (0 = None, 1 = Normal, 2 = Moderator, 4 = Supporter,
@@ -40,17 +40,17 @@ impl Listing {
         Ok(listing(bytes).map(|(_rem, listing)| listing)?)
     }
 
-    ///Parse a listing from the `osu!.db` database file.
+    /// Parse a listing from the `osu!.db` database file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Listing, Error> {
         Self::from_bytes(&fs::read(path)?)
     }
 
-    ///Write the listing to an arbitrary writer.
+    /// Write the listing to an arbitrary writer.
     pub fn to_writer<W: Write>(&self, mut out: W) -> io::Result<()> {
         self.wr(&mut out)
     }
 
-    ///Similar to `to_writer` but writes the listing to a file (ie. `osu!.db`).
+    /// Similar to `to_writer` but writes the listing to a file (ie. `osu!.db`).
     pub fn save<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?))
     }
@@ -59,23 +59,23 @@ impl Listing {
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Beatmap {
-    ///The name of the artist without special characters.
+    /// The name of the artist without special characters.
     pub artist_ascii: Option<String>,
-    ///The unrestrained artist name.
+    /// The unrestrained artist name.
     pub artist_unicode: Option<String>,
-    ///The song title without special characters.
+    /// The song title without special characters.
     pub title_ascii: Option<String>,
-    ///The unrestrained song title.
+    /// The unrestrained song title.
     pub title_unicode: Option<String>,
-    ///The name of the beatmap mapper.
+    /// The name of the beatmap mapper.
     pub creator: Option<String>,
-    ///The name of this specific difficulty.
+    /// The name of this specific difficulty.
     pub difficulty_name: Option<String>,
-    ///The filename of the song file.
+    /// The filename of the song file.
     pub audio: Option<String>,
-    ///The MD5 hash of the beatmap.
+    /// The MD5 hash of the beatmap.
     pub hash: Option<String>,
-    ///The filename of the `.osu` file corresponding to this specific difficulty.
+    /// The filename of the `.osu` file corresponding to this specific difficulty.
     pub file_name: Option<String>,
     pub status: RankedStatus,
     pub hitcircle_count: u16,
@@ -91,12 +91,12 @@ pub struct Beatmap {
     pub taiko_ratings: StarRatings,
     pub ctb_ratings: StarRatings,
     pub mania_ratings: StarRatings,
-    ///Drain time in seconds.
+    /// Drain time in seconds.
     pub drain_time: u32,
-    ///Total beatmap time in milliseconds.
+    /// Total beatmap time in milliseconds.
     pub total_time: u32,
-    ///When should the song start playing when previewed, in milliseconds since the start of the
-    ///song.
+    /// When should the song start playing when previewed, in milliseconds since the start of the
+    /// song.
     pub preview_time: u32,
     pub timing_points: Vec<TimingPoint>,
     pub beatmap_id: i32,
@@ -109,31 +109,31 @@ pub struct Beatmap {
     pub local_beatmap_offset: u16,
     pub stack_leniency: f32,
     pub mode: Mode,
-    ///Where did the song come from, if anywhere.
+    /// Where did the song come from, if anywhere.
     pub song_source: Option<String>,
-    ///Song tags, separated by whitespace.
+    /// Song tags, separated by whitespace.
     pub tags: Option<String>,
     pub online_offset: u16,
     pub title_font: Option<String>,
-    ///Whether the beatmap has been played, and if it has, when was it last played.
+    /// Whether the beatmap has been played, and if it has, when was it last played.
     pub last_played: Option<DateTime<Utc>>,
-    ///Whether the beatmap was in `osz2` format.
+    /// Whether the beatmap was in `osz2` format.
     pub is_osz2: bool,
-    ///The folder name of the beatmapset within the "Songs" folder.
+    /// The folder name of the beatmapset within the "Songs" folder.
     pub folder_name: Option<String>,
-    ///When was the beatmap last checked against the online osu! repository.
+    /// When was the beatmap last checked against the online osu! repository.
     pub last_online_check: DateTime<Utc>,
     pub ignore_sounds: bool,
     pub ignore_skin: bool,
     pub disable_storyboard: bool,
     pub disable_video: bool,
     pub visual_override: bool,
-    ///Quoting the wiki: "Unknown. Only present if version is less than 20140609".
+    /// Quoting the wiki: "Unknown. Only present if version is less than 20140609".
     pub mysterious_short: Option<u16>,
-    ///Who knows.
+    /// Who knows.
     ///
-    ///Perhaps an early attempt at "last modified", but scrapped once peppy noticed it only had
-    ///32 bits.
+    /// Perhaps an early attempt at "last modified", but scrapped once peppy noticed it only had
+    /// 32 bits.
     pub mysterious_last_modified: u32,
     pub mania_scroll_speed: u8,
 }
@@ -143,7 +143,7 @@ pub struct Beatmap {
 pub enum RankedStatus {
     Unknown,
     Unsubmitted,
-    ///Any of the three.
+    /// Any of the three.
     PendingWipGraveyard,
     Ranked,
     Approved,
@@ -179,56 +179,56 @@ impl RankedStatus {
     }
 }
 
-///A list of the precalculated amount of difficulty stars a given mod combination yields for a
-///beatmap.
+/// A list of the precalculated amount of difficulty stars a given mod combination yields for a
+/// beatmap.
 ///
-///You might want to convert this list into a map using
-///`ratings.into_iter().collect::<HashMap<_>>()` or variations, allowing for quick indexing with
-///different mod combinations.
+/// You might want to convert this list into a map using
+/// `ratings.into_iter().collect::<HashMap<_>>()` or variations, allowing for quick indexing with
+/// different mod combinations.
 ///
-///Note that old "osu!.db" files (before the 2014/06/09 version) do not have these ratings.
+/// Note that old "osu!.db" files (before the 2014/06/09 version) do not have these ratings.
 pub type StarRatings = Vec<(ModSet, f64)>;
 
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimingPoint {
-    ///The bpm of the timing point.
+    /// The bpm of the timing point.
     pub bpm: f64,
-    ///The amount of milliseconds from the start of the song this timing point is located on.
+    /// The amount of milliseconds from the start of the song this timing point is located on.
     pub offset: f64,
-    ///Whether the timing point inherits or not.
+    /// Whether the timing point inherits or not.
     ///
-    ///Basically, inherited timing points are absolute, and define a new bpm independent of any previous bpms.
-    ///On the other hand, timing points that do not inherit have a negative bpm representing a percentage of the
-    ///bpm of the previous timing point.
-    ///See the osu wiki on the `.osu` format for more details.
+    /// Basically, inherited timing points are absolute, and define a new bpm independent of any previous bpms.
+    /// On the other hand, timing points that do not inherit have a negative bpm representing a percentage of the
+    /// bpm of the previous timing point.
+    /// See the osu wiki on the `.osu` format for more details.
     pub inherits: bool,
 }
 
-///A grade obtained by passing a beatmap.
-///Also called a rank.
+/// A grade obtained by passing a beatmap.
+/// Also called a rank.
 ///
-///Note that currently grades are just exposed as a raw byte.
-///I am not sure of how do this bytes map to grades as of now.
-///TODO: Figure out grades.
+/// Note that currently grades are just exposed as a raw byte.
+/// I am not sure of how do this bytes map to grades as of now.
+/// TODO: Figure out grades.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Grade {
-    ///SS+, silver SS rank
-    ///Ie. only perfect scores with hidden mod enabled.
+    /// SS+, silver SS rank
+    /// Ie. only perfect scores with hidden mod enabled.
     SSPlus,
-    ///S+, silver S rank
-    ///Ie. highest performance with hidden mod enabled.
+    /// S+, silver S rank
+    /// Ie. highest performance with hidden mod enabled.
     SPlus,
-    ///SS rank
-    ///Ie. only perfect scores.
+    /// SS rank
+    /// Ie. only perfect scores.
     SS,
     S,
     A,
     B,
     C,
     D,
-    ///No rank achieved yet.
+    /// No rank achieved yet.
     Unplayed,
 }
 impl Grade {
@@ -474,9 +474,9 @@ writer!((ModSet,f64) [this,out] {
     this.1.wr(out)?;
 });
 
-///Before the breaking change in 2014 several difficulty values were stored as bytes.
-///After it they were stored as single floats.
-///Accomodate this differences.
+/// Before the breaking change in 2014 several difficulty values were stored as bytes.
+/// After it they were stored as single floats.
+/// Accomodate this differences.
 fn difficulty_value(bytes: &[u8], version: u32) -> IResult<&[u8], f32> {
     if version >= CHANGE_20140609 {
         single(bytes)

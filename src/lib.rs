@@ -171,8 +171,8 @@ where
     }
 }
 
-///Get a datetime from an amount of "windows ticks":
-///The amount of 100-nanosecond units since midnight of the date 0001/01/01.
+/// Get a datetime from an amount of "windows ticks":
+/// The amount of 100-nanosecond units since midnight of the date 0001/01/01.
 fn windows_ticks_to_datetime(ticks: u64) -> DateTime<Utc> {
     let epoch = Utc.ymd(1, 1, 1).and_hms(0, 0, 0);
     epoch
@@ -238,7 +238,7 @@ writer!(Option<String> [this,out] {
     }
 });
 
-///An osu! gamemode.
+/// An osu! gamemode.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -265,7 +265,7 @@ impl Mode {
     }
 }
 
-///A single osu! mod.
+/// A single osu! mod.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -279,12 +279,12 @@ pub enum Mod {
     DoubleTime,
     Relax,
     HalfTime,
-    ///Always goes with `DoubleTime`.
+    /// Always goes with `DoubleTime`.
     Nightcore,
     Flashlight,
     Autoplay,
     SpunOut,
-    ///Also called "Relax2".
+    /// Also called "Relax2".
     Autopilot,
     Perfect,
     Key4,
@@ -294,9 +294,9 @@ pub enum Mod {
     Key8,
     FadeIn,
     Random,
-    ///Cinema.
+    /// Cinema.
     LastMod,
-    ///Only on osu!cuttingedge it seems.
+    /// Only on osu!cuttingedge it seems.
     TargetPractice,
     Key9,
     Coop,
@@ -305,14 +305,14 @@ pub enum Mod {
     Key2,
 }
 impl Mod {
-    ///Each of the 29 mods have a corresponding integer between [0,28], inclusive.
-    ///This method retrieves its integer.
+    /// Each of the 29 mods have a corresponding integer between [0,28], inclusive.
+    /// This method retrieves its integer.
     pub fn raw(&self) -> u8 {
         *self as u8
     }
 
-    ///Build a mod from its corresponding integer.
-    ///Returns `None` if the integer is out-of-range (>28).
+    /// Build a mod from its corresponding integer.
+    /// Returns `None` if the integer is out-of-range (>28).
     pub fn from_raw(bit_offset: u8) -> Option<Mod> {
         use self::Mod::*;
         Some(match bit_offset {
@@ -350,9 +350,9 @@ impl Mod {
     }
 }
 
-///A combination of `Mod`s.
+/// A combination of `Mod`s.
 ///
-///Very cheap to copy around, as it is a just a wrapped 32-bit integer.
+/// Very cheap to copy around, as it is a just a wrapped 32-bit integer.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ModSet(pub u32);
@@ -364,29 +364,29 @@ impl ModSet {
         ModSet(bits)
     }
 
-    ///Create a `ModSet` with no mods included.
+    /// Create a `ModSet` with no mods included.
     pub fn empty() -> ModSet {
         ModSet::from_bits(0)
     }
 
-    ///Check whether the set contains the given mod.
+    /// Check whether the set contains the given mod.
     pub fn contains(&self, m: Mod) -> bool {
         self.bits().bit(m.raw() as usize)
     }
 
-    ///Make a new set of mods with the given mod included or not included.
+    /// Make a new set of mods with the given mod included or not included.
     pub fn set(&self, m: Mod, include: bool) -> ModSet {
         let mut bits = self.bits();
         bits.set_bit(m.raw() as usize, include);
         ModSet::from_bits(bits)
     }
 
-    ///Make a new set of mods with the given mod included.
+    /// Make a new set of mods with the given mod included.
     pub fn with(&self, m: Mod) -> ModSet {
         self.set(m, true)
     }
 
-    ///Make a new set of mods with the given mod removed.
+    /// Make a new set of mods with the given mod removed.
     pub fn without(&self, m: Mod) -> ModSet {
         self.set(m, false)
     }

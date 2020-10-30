@@ -5,7 +5,7 @@ use crate::{
     replay::{replay, Replay},
 };
 
-///A score database, usually coming from a `scores.db` file.
+/// A score database, usually coming from a `scores.db` file.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScoreList {
@@ -13,35 +13,35 @@ pub struct ScoreList {
     pub beatmaps: Vec<BeatmapScores>,
 }
 impl ScoreList {
-    ///Read a score database from its raw bytes.
+    /// Read a score database from its raw bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<ScoreList, Error> {
         Ok(scores(bytes).map(|(_rem, scores)| scores)?)
     }
 
-    ///Read a score database from a `scores.db` file.
+    /// Read a score database from a `scores.db` file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<ScoreList, Error> {
         Self::from_bytes(&fs::read(path)?)
     }
 
-    ///Write the score database to an arbitrary writer.
+    /// Write the score database to an arbitrary writer.
     pub fn to_writer<W: Write>(&self, mut out: W) -> io::Result<()> {
         self.wr(&mut out)
     }
 
-    ///Similar to `to_writer` but writes the scores to a file.
+    /// Similar to `to_writer` but writes the scores to a file.
     pub fn save<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?))
     }
 }
 
-///The scores for a single beatmap.
+/// The scores for a single beatmap.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BeatmapScores {
-    ///The beatmap hash.
-    ///Should be redundant with the individual replay hashes.
+    /// The beatmap hash.
+    /// Should be redundant with the individual replay hashes.
     pub hash: Option<String>,
-    ///All the scored replays for this beatmap.
+    /// All the scored replays for this beatmap.
     pub scores: Vec<Replay>,
 }
 

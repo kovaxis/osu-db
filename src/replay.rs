@@ -12,48 +12,48 @@ use xz2::{
 /// not otherwise specified.
 pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 
-///An osu! replay.
-///The replay might come from a large `ScoreList` score database, or from an individual standalone
-///`.osr` file.
+/// An osu! replay.
+/// The replay might come from a large `ScoreList` score database, or from an individual standalone
+/// `.osr` file.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
-    ///The gamemode the replay was scored in.
+    /// The gamemode the replay was scored in.
     pub mode: Mode,
-    ///The `.db` version of the replay file.
-    ///If the replay is inside a `scores.db` file, the version should be redundant with it (?).
+    /// The `.db` version of the replay file.
+    /// If the replay is inside a `scores.db` file, the version should be redundant with it (?).
     pub version: u32,
-    ///The MD5 hash of the beatmap played.
+    /// The MD5 hash of the beatmap played.
     pub beatmap_hash: Option<String>,
-    ///The name of the player who scored the replay.
+    /// The name of the player who scored the replay.
     pub player_name: Option<String>,
-    ///The replay-specific MD5 hash.
+    /// The replay-specific MD5 hash.
     pub replay_hash: Option<String>,
-    ///The same in all modes: amount of 300 scores.
+    /// The same in all modes: amount of 300 scores.
     pub count_300: u16,
-    ///Amount of 100 scores in std and ctb, but 150 in taiko and 200 in mania.
+    /// Amount of 100 scores in std and ctb, but 150 in taiko and 200 in mania.
     pub count_100: u16,
-    ///Amount of 50 scores in std and mania, but small fruit in ctb.
+    /// Amount of 50 scores in std and mania, but small fruit in ctb.
     pub count_50: u16,
-    ///Amount of gekis in std, but MAX scores (rainbow 300s) in mania.
+    /// Amount of gekis in std, but MAX scores (rainbow 300s) in mania.
     pub count_geki: u16,
-    ///Amount of katsus in std, but 100 scores in mania.
+    /// Amount of katsus in std, but 100 scores in mania.
     pub count_katsu: u16,
-    ///Amount of misses in all modes.
+    /// Amount of misses in all modes.
     pub count_miss: u16,
-    ///The numerical score achieved.
+    /// The numerical score achieved.
     pub score: u32,
     pub max_combo: u16,
     pub perfect_combo: bool,
-    ///The mod combination with which the replay was done.
+    /// The mod combination with which the replay was done.
     pub mods: ModSet,
-    ///A string representing a graph of how much life bar did the player have along the beatmap.
+    /// A string representing a graph of how much life bar did the player have along the beatmap.
     ///
-    ///It is a comma-separated list of human-readable entries in the form `<offset>|<life>`, where
-    ///`<offset>` is the amount of milliseconds since the start of the song and `<life>` is a
-    ///number between 0 and 1 representing the amount of life left.
+    /// It is a comma-separated list of human-readable entries in the form `<offset>|<life>`, where
+    /// `<offset>` is the amount of milliseconds since the start of the song and `<life>` is a
+    /// number between 0 and 1 representing the amount of life left.
     pub life_graph: Option<String>,
-    ///When was the replay scored.
+    /// When was the replay scored.
     pub timestamp: DateTime<Utc>,
     /// Decompressed replay data.
     /// Only available on standalone `.osr` replays, and if the `compression` feature is enabled.
@@ -67,26 +67,26 @@ pub struct Replay {
     /// When writing, this field is used as a fallback if `replay_data` is `None` or the
     /// `compression` feature is disabled.
     pub raw_replay_data: Option<Vec<u8>>,
-    ///Online score id.
-    ///Only has a useful value on replays embedded in a `ScoreList`.
+    /// Online score id.
+    /// Only has a useful value on replays embedded in a `ScoreList`.
     pub online_score_id: u64,
 }
 impl Replay {
-    ///Parse a replay from its raw bytes.
+    /// Parse a replay from its raw bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Replay, Error> {
         Ok(replay(bytes, true).map(|(_rem, replay)| replay)?)
     }
 
-    ///Read a replay from a standalone `.osr` osu! replay file.
+    /// Read a replay from a standalone `.osr` osu! replay file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Replay, Error> {
         Self::from_bytes(&fs::read(path)?)
     }
 
-    ///Write the replay to an arbitrary writer, with the given compression level.
+    /// Write the replay to an arbitrary writer, with the given compression level.
     ///
-    ///If the compression level is `None` the arbitrary default
-    ///`replay::DEFAULT_COMPRESSION_LEVEL` will be used.
-    ///If the `compression` feature is disabled this argument has no effect.
+    /// If the compression level is `None` the arbitrary default
+    /// `replay::DEFAULT_COMPRESSION_LEVEL` will be used.
+    /// If the `compression` feature is disabled this argument has no effect.
     pub fn to_writer<W: Write>(
         &self,
         mut out: W,
@@ -98,7 +98,7 @@ impl Replay {
         )
     }
 
-    ///Similar to `to_writer` but writes the replay to an `osr` file.
+    /// Similar to `to_writer` but writes the replay to an `osr` file.
     pub fn save<P: AsRef<Path>>(&self, path: P, compression_level: Option<u32>) -> io::Result<()> {
         self.to_writer(BufWriter::new(File::create(path)?), compression_level)
     }
@@ -189,43 +189,43 @@ writer!(Replay [this,out,compress_data: Option<u32>] {
     this.online_score_id.wr(out)?;
 });
 
-///Represents a single action within a replay.
-///The meaning of an action depends on the gamemode of the replay, but all actions
-///contain:
+/// Represents a single action within a replay.
+/// The meaning of an action depends on the gamemode of the replay, but all actions
+/// contain:
 ///
 /// - An integral amount of milliseconds elapsed since the last action, `delta`.
 /// - 3 pieces of floating-point payload: `x`, `y` and `z`.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Action {
-    ///The amount of milliseconds since the last action.
+    /// The amount of milliseconds since the last action.
     pub delta: i64,
-    ///First bit of payload in the action.
+    /// First bit of payload in the action.
     ///
-    ///In standard:
-    ///Represents the `x` coordinate of the mouse, from `0` to `512`.
+    /// In standard:
+    /// Represents the `x` coordinate of the mouse, from `0` to `512`.
     ///
-    ///In mania:
-    ///Represents the bitwise combination of buttons pressed.
+    /// In mania:
+    /// Represents the bitwise combination of buttons pressed.
     pub x: f32,
-    ///Second bit of payload in the action.
+    /// Second bit of payload in the action.
     ///
-    ///In standard:
-    ///Represents the `y` coordinate of the mouse, from `0` to `384`.
+    /// In standard:
+    /// Represents the `y` coordinate of the mouse, from `0` to `384`.
     pub y: f32,
-    ///Third bit of payload in the action.
+    /// Third bit of payload in the action.
     ///
-    ///In standard:
-    ///Represents the bitwise combination of buttons pressed.
+    /// In standard:
+    /// Represents the bitwise combination of buttons pressed.
     pub z: f32,
 }
 impl Action {
-    ///Get the pressed osu!standard buttons.
+    /// Get the pressed osu!standard buttons.
     pub fn std_buttons(&self) -> StandardButtonSet {
         StandardButtonSet::from_bits(self.z as u32)
     }
 
-    ///Get the pressed osu!mania buttons.
+    /// Get the pressed osu!mania buttons.
     pub fn mania_buttons(&self) -> ManiaButtonSet {
         ManiaButtonSet::from_bits(self.x as u32)
     }
@@ -256,36 +256,36 @@ impl StandardButtonSet {
         StandardButtonSet(bits)
     }
 
-    ///Create a new button combination with no buttons pressed.
+    /// Create a new button combination with no buttons pressed.
     pub fn none() -> StandardButtonSet {
         StandardButtonSet::from_bits(0)
     }
 
-    ///Check whether the combination lists the button as pressed.
+    /// Check whether the combination lists the button as pressed.
     pub fn is_down(&self, button: StandardButton) -> bool {
         self.bits().bit(button.raw() as usize)
     }
 
-    ///Set the pressed status of the given button.
+    /// Set the pressed status of the given button.
     pub fn set_down(&self, button: StandardButton, is_down: bool) -> StandardButtonSet {
         let mut bits = self.bits();
         bits.set_bit(button.raw() as usize, is_down);
         StandardButtonSet::from_bits(bits)
     }
-    ///Set the pressed status of a button to `true`.
+    /// Set the pressed status of a button to `true`.
     pub fn press(&self, button: StandardButton) -> StandardButtonSet {
         self.set_down(button, true)
     }
-    ///Set the pressed status of a button to `false`.
+    /// Set the pressed status of a button to `false`.
     pub fn release(&self, button: StandardButton) -> StandardButtonSet {
         self.set_down(button, false)
     }
 }
 
-///Any combination of mania buttons being pressed.
+/// Any combination of mania buttons being pressed.
 ///
-///Button indices start from `0`, and go left-to-right.
-///Button indices outside the replay key count should never be down.
+/// Button indices start from `0`, and go left-to-right.
+/// Button indices outside the replay key count should never be down.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ManiaButtonSet(pub u32);
 impl ManiaButtonSet {
@@ -296,27 +296,27 @@ impl ManiaButtonSet {
         ManiaButtonSet(bits)
     }
 
-    ///Create a new key combination with no keys pressed.
+    /// Create a new key combination with no keys pressed.
     pub fn none() -> ManiaButtonSet {
         ManiaButtonSet::from_bits(0)
     }
 
-    ///Check whether a certain key is pressed.
+    /// Check whether a certain key is pressed.
     pub fn is_down(&self, button: usize) -> bool {
         self.bits().bit(button)
     }
 
-    ///Set the pressed status of a key.
+    /// Set the pressed status of a key.
     pub fn set_down(&self, button: usize, is_down: bool) -> ManiaButtonSet {
         let mut bits = self.bits();
         bits.set_bit(button, is_down);
         ManiaButtonSet::from_bits(bits)
     }
-    ///Set the pressed status of a key to `true`.
+    /// Set the pressed status of a key to `true`.
     pub fn press(&self, button: usize) -> ManiaButtonSet {
         self.set_down(button, true)
     }
-    ///Set the pressed status of a key to `false`.
+    /// Set the pressed status of a key to `false`.
     pub fn release(&self, button: usize) -> ManiaButtonSet {
         self.set_down(button, false)
     }

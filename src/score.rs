@@ -7,7 +7,7 @@ use crate::{
 
 ///A score database, usually coming from a `scores.db` file.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScoreList {
     pub version: u32,
     pub beatmaps: Vec<BeatmapScores>,
@@ -36,7 +36,7 @@ impl ScoreList {
 
 ///The scores for a single beatmap.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BeatmapScores {
     ///The beatmap hash.
     ///Should be redundant with the individual replay hashes.

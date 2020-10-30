@@ -16,7 +16,7 @@ pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 ///The replay might come from a large `ScoreList` score database, or from an individual standalone
 ///`.osr` file.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Replay {
     ///The gamemode the replay was scored in.
     pub mode: Mode,
@@ -189,7 +189,7 @@ writer!(Replay [this,out,compress_data: Option<u32>] {
 /// - An integral amount of milliseconds elapsed since the last action, `delta`.
 /// - 3 pieces of floating-point payload: `x`, `y` and `z`.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Action {
     ///The amount of milliseconds since the last action.
     pub delta: i64,

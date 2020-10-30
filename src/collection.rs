@@ -5,7 +5,7 @@ use crate::prelude::*;
 ///A structure representing the `collection.db` file.
 ///Contains a list of collections.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CollectionList {
     pub version: u32,
     pub collections: Vec<Collection>,
@@ -35,7 +35,7 @@ impl CollectionList {
 ///A single collection.
 ///Contains a list of beatmap hashes that fall within this collection.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Collection {
     pub name: Option<String>,
     pub beatmap_hashes: Vec<Option<String>>,

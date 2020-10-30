@@ -11,7 +11,7 @@ loading, modifying and saving the following osu! file formats:
 To use, simply add this line to your `Cargo.toml`:
 
 ```toml
-osu-db = "*"
+osu-db = "0.2"
 ```
 
 After that you will want to use the different load/save functions on the
@@ -37,3 +37,5 @@ listing.save("osu!.db").unwrap();
 ```
 
 More details in the crate documentation.
+
+`osu-db` has been tested to work with `osu!stable` databases of at least version 

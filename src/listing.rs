@@ -1,7 +1,7 @@
 //! Parsing for the `osu!.db` file, containing cached information about the beatmap listing.
 
 use crate::prelude::*;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 ///In these `osu!.db` versions several breaking changes were introduced.
 ///While parsing, these changes are automatically handled depending on the `osu!.db` version.
@@ -11,7 +11,7 @@ pub const CHANGE_20191106: u32 = 20191106;
 ///A structure representing the `osu!.db` binary database.
 ///This database contains pre-processed data and settings for all available osu! beatmaps.
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Listing {
     ///The `osu!.db` version number.
     ///This is a decimal number in the form `YYYYMMDD` (eg. `20150203`).
@@ -57,7 +57,7 @@ impl Listing {
 }
 
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Beatmap {
     ///The name of the artist without special characters.
     pub artist_ascii: Option<String>,
@@ -137,18 +137,6 @@ pub struct Beatmap {
     pub mysterious_last_modified: u32,
     pub mania_scroll_speed: u8,
 }
-///Uses the stored beatmap hash.
-impl Hash for Beatmap {
-    fn hash<H: Hasher>(&self, h: &mut H) {
-        self.hash.hash(h);
-    }
-}
-///Compares beatmap ids only.
-impl PartialEq for Beatmap {
-    fn eq(&self, rhs: &Self) -> bool {
-        self.beatmap_id == rhs.beatmap_id
-    }
-}
 
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -202,7 +190,7 @@ impl RankedStatus {
 pub type StarRatings = Vec<(ModSet, f64)>;
 
 #[cfg_attr(feature = "ser-de", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TimingPoint {
     ///The bpm of the timing point.
     pub bpm: f64,
@@ -368,11 +356,8 @@ named_args!(beatmap (version: u32) <&[u8], Beatmap>, do_parse!(
 ));
 
 writer!(Beatmap [this,out,version: u32] {
-    //Write beatmap into a temporary buffer, as beatmap length needs to be
-    //known and prefixed
-    let mut raw_buf=Vec::new();
-    {
-        let out=&mut raw_buf;
+    //Write into a writer without prefixing the length
+    fn write_dry<W: Write>(this: &Beatmap, out: &mut W, version: u32) -> io::Result<()> {
         macro_rules! wr_difficulty_value {
             ($f32:expr) => {{
                 if version>=CHANGE_20140609 {
@@ -437,10 +422,20 @@ writer!(Beatmap [this,out,version: u32] {
         }
         this.mysterious_last_modified.wr(out)?;
         this.mania_scroll_speed.wr(out)?;
+        Ok(())
     }
-    //Write the raw buffer prefixed by its length
-    (raw_buf.len() as u32).wr(out)?;
-    out.write_all(&raw_buf)?;
+    if version < CHANGE_20191106 {
+        //Write beatmap into a temporary buffer, as beatmap length needs to be
+        //known and prefixed
+        let mut raw_buf = Vec::new();
+        write_dry(this, &mut raw_buf, version)?;
+        //Write the raw buffer prefixed by its length
+        (raw_buf.len() as u32).wr(out)?;
+        out.write_all(&raw_buf)?;
+    }else{
+        //Write beatmap as-is
+        write_dry(this, out, version)?;
+    }
 });
 
 named!(timing_point<&[u8], TimingPoint>, do_parse!(

@@ -2,12 +2,6 @@
 
 use crate::prelude::*;
 
-#[cfg(feature = "compression")]
-use xz2::{
-    stream::{LzmaOptions, Stream},
-    write::{XzDecoder, XzEncoder},
-};
-
 /// The LZMA compression level (a number between 0 and 9) used to write replay data when it is
 /// not otherwise specified.
 pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
@@ -322,18 +316,21 @@ impl ManiaButtonSet {
     }
 }
 
-#[cfg(feature = "compression")]
 fn parse_replay_data(raw: Option<&[u8]>) -> Result<Option<Vec<Action>>, Error> {
-    if let Some(raw) = raw {
-        let mut decoder =
-            XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
-        decoder.write_all(raw)?;
-        let data = decoder.finish()?;
-        let actions = actions(&data)?.1;
-        Ok(Some(actions))
-    } else {
-        Ok(None)
+    #[cfg(feature = "compression")]
+    {
+        if let Some(raw) = raw {
+            use xz2::{stream::Stream, write::XzDecoder};
+
+            let mut decoder =
+                XzDecoder::new_stream(Vec::new(), Stream::new_lzma_decoder(u64::max_value())?);
+            decoder.write_all(raw)?;
+            let data = decoder.finish()?;
+            let actions = actions(&data)?.1;
+            return Ok(Some(actions));
+        }
     }
+    Ok(None)
 }
 
 fn write_replay_data<W: Write>(
@@ -348,6 +345,10 @@ fn write_replay_data<W: Write>(
     #[cfg(feature = "compression")]
     {
         if let Some(actions) = actions {
+            use xz2::{
+                stream::{LzmaOptions, Stream},
+                write::XzEncoder,
+            };
             let mut encoder = XzEncoder::new_stream(
                 Vec::new(),
                 Stream::new_lzma_encoder(&LzmaOptions::new_preset(compression_level)?)?,

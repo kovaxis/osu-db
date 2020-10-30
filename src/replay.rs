@@ -4,7 +4,7 @@ use crate::prelude::*;
 
 /// The LZMA compression level (a number between 0 and 9) used to write replay data when it is
 /// not otherwise specified.
-pub const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
+const DEFAULT_COMPRESSION_LEVEL: u32 = 5;
 
 /// An osu! replay.
 /// The replay might come from a large `ScoreList` score database, or from an individual standalone

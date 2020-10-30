@@ -14,6 +14,8 @@ TODO:
     `raw_replay_data` field is always available, instead.
 - `PartialEq` is now implemented everywhere.
 - Moved from `failure` to `std::error::Error`.
+- Made the unintentionally exposed constants `BREAKING_CHANGE` and `DEFAULT_COMPRESSION_LEVEL`
+    private.
 
 # 0.1
 

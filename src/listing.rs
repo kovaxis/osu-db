@@ -5,8 +5,8 @@ use std::hash::Hash;
 
 /// In these `osu!.db` versions several breaking changes were introduced.
 /// While parsing, these changes are automatically handled depending on the `osu!.db` version.
-pub const CHANGE_20140609: u32 = 20140609;
-pub const CHANGE_20191106: u32 = 20191106;
+const CHANGE_20140609: u32 = 20140609;
+const CHANGE_20191106: u32 = 20191106;
 
 /// A structure representing the `osu!.db` binary database.
 /// This database contains pre-processed data and settings for all available osu! beatmaps.

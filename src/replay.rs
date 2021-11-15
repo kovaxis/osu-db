@@ -342,7 +342,7 @@ fn write_replay_data<W: Write>(
     compression_level: u32,
 ) -> io::Result<()> {
     let mut raw = raw.as_deref();
-    let compress_buf;
+    let compress_buf: Vec<u8>;
     //Compress if it's enabled and available
     #[cfg(feature = "compression")]
     {

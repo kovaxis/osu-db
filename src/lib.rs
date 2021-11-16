@@ -263,7 +263,7 @@ writer!(DateTime<Utc> [this,out] datetime_to_windows_ticks(this).wr(out)?);
 // The variable-length ULEB128 encoding used mainly for string lengths.
 fn uleb(bytes: &[u8]) -> IResult<&[u8], usize> {
     let (rem, prelude) = take_while(|b: u8| b.bit(7))(bytes)?;
-    let (rem, finalizer) = take(1_u8)(rem)?;
+    let (rem, finalizer) = byte(rem)?;
 
     let mut out = 0;
     let mut offset = 0;
@@ -273,7 +273,7 @@ fn uleb(bytes: &[u8]) -> IResult<&[u8], usize> {
         offset += 7;
     }
 
-    out |= (finalizer[0] as usize) << offset;
+    out |= (finalizer as usize) << offset;
 
     Ok((rem, out))
 }
@@ -292,11 +292,11 @@ writer!(usize [this,out] {
 
 // An optional string.
 fn opt_string(bytes: &[u8]) -> IResult<&[u8], Option<String>> {
-    let (rem, first_byte) = take(1_u8)(bytes)?;
+    let (rem, first_byte) = byte(bytes)?;
 
     match first_byte {
-        [0x00] => Ok((rem, None)),
-        [0x0b] => {
+        0x00 => Ok((rem, None)),
+        0x0b => {
             let (rem, len) = uleb(rem)?;
             let (rem, string) = map_res(take(len), std::str::from_utf8)(rem)?;
 

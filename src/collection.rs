@@ -1,5 +1,7 @@
 //! Parsing for the `collection.db` file, containing all user collections.
 
+use std::convert::identity;
+
 use crate::prelude::*;
 
 /// A structure representing the `collection.db` file.
@@ -41,19 +43,35 @@ pub struct Collection {
     pub beatmap_hashes: Vec<Option<String>>,
 }
 
-named!(collections<&[u8], CollectionList>, do_parse!(
-    version: int >>
-    collections: length_count!(int, do_parse!(
-        name: opt_string >>
-        beatmap_hashes: length_count!(int, opt_string) >>
-        (Collection { name, beatmap_hashes })
-    )) >>
-    (CollectionList { version, collections })
-));
+fn collections(bytes: &[u8]) -> IResult<&[u8], CollectionList> {
+    let (rem, version) = int(bytes)?;
+    let (rem, collections) = length_count(map(int, identity), collection)(rem)?;
+
+    let list = CollectionList {
+        version,
+        collections,
+    };
+
+    Ok((rem, list))
+}
+
+fn collection(bytes: &[u8]) -> IResult<&[u8], Collection> {
+    let (rem, name) = opt_string(bytes)?;
+    let (rem, beatmap_hashes) = length_count(map(int, identity), opt_string)(rem)?;
+
+    let collection = Collection {
+        name,
+        beatmap_hashes,
+    };
+
+    Ok((rem, collection))
+}
+
 writer!(CollectionList [this,out] {
     this.version.wr(out)?;
     PrefixedList(&this.collections).wr(out)?;
 });
+
 writer!(Collection [this,out] {
     this.name.wr(out)?;
     PrefixedList(&this.beatmap_hashes).wr(out)?;

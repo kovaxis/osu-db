@@ -23,17 +23,17 @@ pub struct Replay {
     pub player_name: Option<String>,
     /// The replay-specific MD5 hash.
     pub replay_hash: Option<String>,
-    /// The same in all modes: amount of 300 scores.
+    /// Amount of 300s (fruits in ctb).
     pub count_300: u16,
-    /// Amount of 100 scores in std and ctb, but 150 in taiko and 200 in mania.
+    /// Amount of 100s (drops in ctb).
     pub count_100: u16,
-    /// Amount of 50 scores in std and mania, but small fruit in ctb.
+    /// Amount of 50s (droplets in ctb).
     pub count_50: u16,
-    /// Amount of gekis in std, but MAX scores (rainbow 300s) in mania.
+    /// Amount of gekis (MAX scores / rainbow 300s in mania).
     pub count_geki: u16,
-    /// Amount of katsus in std, but 100 scores in mania.
+    /// Amount of katsus (200s in mania, droplet misses in ctb).
     pub count_katsu: u16,
-    /// Amount of misses in all modes.
+    /// Amount of misses (fruit + drop misses in ctb).
     pub count_miss: u16,
     /// The numerical score achieved.
     pub score: u32,

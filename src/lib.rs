@@ -85,9 +85,11 @@ mod prelude {
     };
     pub(crate) use chrono::{DateTime, Duration, TimeZone, Utc};
     pub(crate) use nom::{
-        call, complete, cond, do_parse, length_bytes, length_count, many0, map, map_opt, map_res,
-        named, named_args, opt, switch, tag, take, take_str, take_while, take_while1, value,
-        Err as NomErr, ErrorKind as NomErrKind, IResult,
+        bytes::complete::{tag, take, take_while, take_while1},
+        combinator::{cond, map, map_opt, map_res, opt},
+        error::{Error as NomError, ErrorKind as NomErrorKind},
+        multi::{length_count, length_data, many0},
+        Err as NomErr, IResult, Needed,
     };
     #[cfg(feature = "ser-de")]
     pub use serde_derive::{Deserialize, Serialize};
@@ -109,47 +111,61 @@ pub mod score;
 
 #[derive(Debug)]
 pub enum Error {
-    Parse(NomErrKind),
-    Io(io::Error),
     /// Only available with the `compression` feature enabled.
     #[cfg(feature = "compression")]
     Compression(LzmaError),
+    Io(io::Error),
+    ParseError(NomErrorKind),
+    ParseIncomplete(Needed),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Parse(errkind) => {
-                write!(f, "failed to parse osu file: {}", errkind.description())
-            }
-            Error::Io(_err) => write!(f, "failed to read osu .db file"),
             #[cfg(feature = "compression")]
-            Error::Compression(_err) => write!(f, "failed to compress/decompress replay data"),
+            Error::Compression(_err) => f.write_str("failed to compress/decompress replay data"),
+            Error::Io(_err) => f.write_str("failed to read osu .db file"),
+            Error::ParseError(kind) => {
+                write!(f, "failed to parse osu file: {}", kind.description())
+            }
+            Error::ParseIncomplete(Needed::Size(u)) => write!(
+                f,
+                "failed to parse osu file: parsing requires {} bytes/chars",
+                u
+            ),
+            Error::ParseIncomplete(Needed::Unknown) => {
+                f.write_str("failed to parse osu file: parsing requires more data")
+            }
         }
     }
 }
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Parse(_err) => None,
-            Error::Io(err) => Some(err as &dyn std::error::Error),
             #[cfg(feature = "compression")]
             Error::Compression(err) => Some(err as &dyn std::error::Error),
+            Error::Io(err) => Some(err as &dyn std::error::Error),
+            Error::ParseError(_kind) => None,
+            Error::ParseIncomplete(_needed) => None,
         }
     }
 }
 impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
+    fn from(err: io::Error) -> Self {
         Error::Io(err)
     }
 }
-impl<I> From<NomErr<I>> for Error {
-    fn from(err: NomErr<I>) -> Error {
-        Error::Parse(err.into_error_kind())
+impl From<NomErr<NomError<&[u8]>>> for Error {
+    fn from(err: NomErr<NomError<&[u8]>>) -> Self {
+        match err {
+            NomErr::Incomplete(needed) => Self::ParseIncomplete(needed),
+            NomErr::Error(err) | NomErr::Failure(err) => Self::ParseError(err.code),
+        }
     }
 }
+
 #[cfg(feature = "compression")]
 impl From<LzmaError> for Error {
-    fn from(err: LzmaError) -> Error {
+    fn from(err: LzmaError) -> Self {
         Error::Compression(err)
     }
 }
@@ -187,13 +203,16 @@ macro_rules! impl_bit {
 impl_bit!(u8, u16, u32, u64);
 
 //Common fixed-size osu `.db` primitives.
-use nom::le_f32 as single;
-use nom::le_f64 as double;
-use nom::le_u16 as short;
-use nom::le_u32 as int;
-use nom::le_u64 as long;
-use nom::le_u8 as byte;
-named!(boolean<&[u8],bool>, map!(take!(1),|b| b[0]!=0));
+use nom::number::complete::le_f32 as single;
+use nom::number::complete::le_f64 as double;
+use nom::number::complete::le_u16 as short;
+use nom::number::complete::le_u32 as int;
+use nom::number::complete::le_u64 as long;
+use nom::number::complete::le_u8 as byte;
+
+fn boolean(bytes: &[u8]) -> IResult<&[u8], bool> {
+    map(byte, |byte: u8| byte != 0)(bytes)
+}
 
 writer!(u8 [this,out] out.write_all(&this.to_le_bytes())?);
 writer!(u16 [this,out] out.write_all(&this.to_le_bytes())?);
@@ -228,7 +247,10 @@ fn windows_ticks_to_datetime(ticks: u64) -> DateTime<Utc> {
         + Duration::microseconds((ticks / 10) as i64)
         + Duration::nanoseconds((ticks % 10 * 100) as i64)
 }
-named!(datetime<&[u8], DateTime<Utc>>, map!(long,windows_ticks_to_datetime));
+
+fn datetime(bytes: &[u8]) -> IResult<&[u8], DateTime<Utc>> {
+    map(long, windows_ticks_to_datetime)(bytes)
+}
 
 fn datetime_to_windows_ticks(datetime: &DateTime<Utc>) -> u64 {
     let epoch = Utc.ymd(1, 1, 1).and_hms(0, 0, 0);
@@ -239,20 +261,22 @@ fn datetime_to_windows_ticks(datetime: &DateTime<Utc>) -> u64 {
 writer!(DateTime<Utc> [this,out] datetime_to_windows_ticks(this).wr(out)?);
 
 // The variable-length ULEB128 encoding used mainly for string lengths.
-named!(uleb<&[u8],usize>, do_parse!(
-    prelude: take_while!(|b: u8| b.bit(7)) >>
-    finalizer: take!(1) >>
-    ({
-        let mut out=0;
-        let mut offset=0;
-        for byte in prelude {
-            out|=(byte.bit_range(0..7) as usize)<<offset;
-            offset+=7;
-        }
-        out|=(finalizer[0] as usize)<<offset;
-        out
-    })
-));
+fn uleb(bytes: &[u8]) -> IResult<&[u8], usize> {
+    let (rem, prelude) = take_while(|b: u8| b.bit(7))(bytes)?;
+    let (rem, finalizer) = byte(rem)?;
+
+    let mut out = 0;
+    let mut offset = 0;
+
+    for byte in prelude {
+        out |= (byte.bit_range(0..7) as usize) << offset;
+        offset += 7;
+    }
+
+    out |= (finalizer as usize) << offset;
+
+    Ok((rem, out))
+}
 
 writer!(usize [this,out] {
     let mut this=*this;
@@ -267,14 +291,20 @@ writer!(usize [this,out] {
 });
 
 // An optional string.
-named!(opt_string<&[u8],Option<String>>, switch!(take!(1),
-    &[0x00] => value!(None) |
-    &[0x0b] => do_parse!(
-        len: uleb >>
-        string: take_str!(len) >>
-        (Some(string.to_string()))
-    )
-));
+fn opt_string(bytes: &[u8]) -> IResult<&[u8], Option<String>> {
+    let (rem, first_byte) = byte(bytes)?;
+
+    match first_byte {
+        0x00 => Ok((rem, None)),
+        0x0b => {
+            let (rem, len) = uleb(rem)?;
+            let (rem, string) = map_res(take(len), std::str::from_utf8)(rem)?;
+
+            Ok((rem, Some(string.to_owned())))
+        }
+        _ => Err(NomErr::Error(NomError::new(bytes, NomErrorKind::Switch))),
+    }
+}
 
 writer!(Option<String> [this,out] {
     match this {
@@ -444,38 +474,61 @@ impl ModSet {
 #[cfg(test)]
 mod test {
     use super::*;
-    use nom::Needed;
 
     #[test]
     fn basic() {
-        assert_eq!(byte(b" "), Ok((&[][..], 32)));
-        assert_eq!(short(&[10, 2]), Ok((&[][..], 522)));
-        assert_eq!(int(&[10, 10, 0, 0, 3]), Ok((&[3][..], 2570)));
         assert_eq!(
-            long(&[0, 0, 1, 0, 2, 0, 3, 0]),
+            byte::<_, NomError<&[u8]>>(" ".as_bytes()),
+            Ok((&[][..], 32))
+        );
+        assert_eq!(
+            short::<_, NomError<&[u8]>>(&[10, 2][..]),
+            Ok((&[][..], 522))
+        );
+        assert_eq!(
+            int::<_, NomError<&[u8]>>(&[10, 10, 0, 0, 3][..]),
+            Ok((&[3][..], 2570))
+        );
+        assert_eq!(
+            long::<_, NomError<&[u8]>>(&[0, 0, 1, 0, 2, 0, 3, 0][..]),
             Ok((&[][..], 844_433_520_132_096))
         );
         assert_eq!(
-            single(&[0, 0, 0b00100000, 0b00111110, 4]),
+            single::<_, NomError<&[u8]>>(&[0, 0, 0b00100000, 0b00111110, 4][..]),
             Ok((&[4][..], 0.15625))
         );
         assert_eq!(
-            double(&[0b00000010, 0, 0, 0, 0, 0, 0b11110000, 0b00111111]),
+            double::<_, NomError<&[u8]>>(&[0b00000010, 0, 0, 0, 0, 0, 0b11110000, 0b00111111][..]),
             Ok((&[][..], 1.0000000000000004))
         );
-        assert_eq!(boolean(&[34, 4, 0]), Ok((&[4, 0][..], true)));
-        assert_eq!(int(&[3, 5, 4]), Err(NomErr::Incomplete(Needed::Size(4))));
-        assert_eq!(boolean(&[]), Err(NomErr::Incomplete(Needed::Size(1))));
+        assert_eq!(boolean(&[34, 4, 0][..]), Ok((&[4, 0][..], true)));
         assert_eq!(
-            double(&[14, 25, 15, 24, 3]),
-            Err(NomErr::Incomplete(Needed::Size(8)))
+            int::<_, NomError<&[u8]>>(&[3, 5, 4][..]),
+            Err(NomErr::Error(NomError::new(
+                &[3, 5, 4][..],
+                NomErrorKind::Eof
+            )))
+        );
+        assert_eq!(
+            boolean(&[][..]),
+            Err(NomErr::Error(NomError::new(&[][..], NomErrorKind::Eof)))
+        );
+        assert_eq!(
+            double::<_, NomError<&[u8]>>(&[14, 25, 15, 24, 3][..]),
+            Err(NomErr::Error(NomError::new(
+                &[14, 25, 15, 24, 3][..],
+                NomErrorKind::Eof
+            )))
         );
     }
 
     #[test]
     fn uleb128() {
         assert_eq!(uleb(&[70]), Ok((&[][..], 70)));
-        assert_eq!(uleb(&[]), Err(NomErr::Incomplete(Needed::Size(1))));
+        assert_eq!(
+            uleb(&[]),
+            Err(NomErr::Error(NomError::new(&[][..], NomErrorKind::Eof)))
+        );
         assert_eq!(uleb(&[129, 2]), Ok((&[][..], 257)));
         assert_eq!(uleb(&[124, 2]), Ok((&[2][..], 124)));
     }
@@ -496,7 +549,7 @@ mod test {
         //Missing string length
         assert_eq!(
             opt_string(b"\x0b"),
-            Err(NomErr::Incomplete(Needed::Size(1)))
+            Err(NomErr::Error(NomError::new(&[][..], NomErrorKind::Eof)))
         );
         //Long strings
         let mut raw = Vec::from(&b"\x0b\x81\x01"[..]);

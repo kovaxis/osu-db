@@ -17,7 +17,7 @@ include = ["Cargo.toml", "src", "LICENSE"]
 members = ["conv"]
 
 [dependencies]
-nom = "4"
+nom = "7"
 chrono = "0.4"
 
 serde = { version = "1", optional = true }

@@ -15,7 +15,7 @@ pub struct ScoreList {
 impl ScoreList {
     /// Read a score database from its raw bytes.
     pub fn from_bytes(bytes: &[u8]) -> Result<ScoreList, Error> {
-        Ok(scores(bytes).map(|(_rem, scores)| scores)?)
+        scores(bytes).map(|(_rem, scores)| scores)
     }
 
     /// Read a score database from a `scores.db` file.
@@ -45,15 +45,38 @@ pub struct BeatmapScores {
     pub scores: Vec<Replay>,
 }
 
-named!(scores<&[u8], ScoreList>, do_parse!(
-    version: int >>
-    beatmaps: length_count!(int, do_parse!(
-        hash: opt_string >>
-        scores: length_count!(int, call!(replay, false)) >>
-        (BeatmapScores{ hash, scores })
-    )) >>
-    (ScoreList{ version, beatmaps })
-));
+fn scores(bytes: &[u8]) -> Result<(&[u8], ScoreList), Error> {
+    let (rem, version) = int(bytes)?;
+    let (mut rem, len) = int(rem)?;
+    let mut beatmaps = Vec::with_capacity(len as usize);
+
+    for _ in 0..len {
+        let (rem_, beatmap_scores) = beatmap_scores(rem)?;
+        beatmaps.push(beatmap_scores);
+        rem = rem_;
+    }
+
+    let list = ScoreList { version, beatmaps };
+
+    Ok((rem, list))
+}
+
+fn beatmap_scores(bytes: &[u8]) -> Result<(&[u8], BeatmapScores), Error> {
+    let (rem, hash) = opt_string(bytes)?;
+    let (mut rem, len) = int(rem)?;
+    let mut scores = Vec::with_capacity(len as usize);
+
+    for _ in 0..len {
+        let (rem_, replay) = replay(rem, false)?;
+        rem = rem_;
+        scores.push(replay);
+    }
+
+    let scores = BeatmapScores { hash, scores };
+
+    Ok((rem, scores))
+}
+
 writer!(ScoreList [this,out] {
     this.version.wr(out)?;
     PrefixedList(&this.beatmaps).wr(out)?;

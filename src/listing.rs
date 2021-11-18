@@ -1,7 +1,7 @@
 //! Parsing for the `osu!.db` file, containing cached information about the beatmap listing.
 
 use crate::prelude::*;
-use std::hash::Hash;
+use std::{convert::identity, hash::Hash};
 
 /// In these `osu!.db` versions several breaking changes were introduced.
 /// While parsing, these changes are automatically handled depending on the `osu!.db` version.
@@ -263,18 +263,27 @@ impl Grade {
     }
 }
 
-named!(listing<&[u8], Listing>, do_parse!(
-    version: int >>
-    folder_count: int >>
-    account_unlocked: boolean >>
-    unlock_date: datetime >>
-    player_name: opt_string >>
-    beatmaps: length_count!(int, call!(beatmap, version)) >>
-    user_permissions: int >>
-    (Listing{
-        version,folder_count,unban_date: build_option(account_unlocked, unlock_date),player_name,beatmaps,user_permissions,
-    })
-));
+fn listing(bytes: &[u8]) -> IResult<&[u8], Listing> {
+    let (rem, version) = int(bytes)?;
+    let (rem, folder_count) = int(rem)?;
+    let (rem, account_unlocked) = boolean(rem)?;
+    let (rem, unlock_date) = datetime(rem)?;
+    let (rem, player_name) = opt_string(rem)?;
+    let (rem, beatmaps) = length_count(map(int, identity), |bytes| beatmap(bytes, version))(rem)?;
+    let (rem, user_permissions) = int(rem)?;
+
+    let listing = Listing {
+        version,
+        folder_count,
+        unban_date: build_option(account_unlocked, unlock_date),
+        player_name,
+        beatmaps,
+        user_permissions,
+    };
+
+    Ok((rem, listing))
+}
+
 writer!(Listing [this, out] {
     this.version.wr(out)?;
     this.folder_count.wr(out)?;
@@ -284,76 +293,121 @@ writer!(Listing [this, out] {
     this.user_permissions.wr(out)?;
 });
 
-named_args!(beatmap (version: u32) <&[u8], Beatmap>, do_parse!(
-    beatmap_size: cond!(version<CHANGE_20191106, int) >>
-    artist_ascii: opt_string >>
-    artist_unicode: opt_string >>
-    title_ascii: opt_string >>
-    title_unicode: opt_string >>
-    creator: opt_string >>
-    difficulty_name: opt_string >>
-    audio: opt_string >>
-    hash: opt_string >>
-    file_name: opt_string >>
-    status: ranked_status >>
-    hitcircle_count: short >>
-    slider_count: short >>
-    spinner_count: short >>
-    last_modified: datetime >>
-    approach_rate: call!(difficulty_value, version) >>
-    circle_size: call!(difficulty_value, version) >>
-    hp_drain: call!(difficulty_value, version) >>
-    overall_difficulty: call!(difficulty_value, version) >>
-    slider_velocity: double >>
-    std_ratings: call!(star_ratings, version) >>
-    taiko_ratings: call!(star_ratings, version) >>
-    ctb_ratings: call!(star_ratings, version) >>
-    mania_ratings: call!(star_ratings, version) >>
-    drain_time: int >>
-    total_time: int >>
-    preview_time: int >>
-    timing_points: length_count!(int, timing_point) >>
-    beatmap_id: int >>
-    beatmapset_id: int >>
-    thread_id: int >>
-    std_grade: grade >>
-    taiko_grade: grade >>
-    ctb_grade: grade >>
-    mania_grade: grade >>
-    local_beatmap_offset: short >>
-    stack_leniency: single >>
-    mode: map_opt!(byte, Mode::from_raw) >>
-    song_source: opt_string >>
-    tags: opt_string >>
-    online_offset: short >>
-    title_font: opt_string >>
-    unplayed: boolean >>
-    last_played: datetime >>
-    is_osz2: boolean >>
-    folder_name: opt_string >>
-    last_online_check: datetime >>
-    ignore_sounds: boolean >>
-    ignore_skin: boolean >>
-    disable_storyboard: boolean >>
-    disable_video: boolean >>
-    visual_override: boolean >>
-    mysterious_short: cond!(version<CHANGE_20140609, short) >>
-    mysterious_last_modified: int >>
-    mania_scroll_speed: byte >>
-    (Beatmap{
-        artist_ascii,artist_unicode,title_ascii,title_unicode,creator,
-        difficulty_name,audio,hash,file_name,status,hitcircle_count,slider_count,
-        spinner_count,last_modified,approach_rate,circle_size,hp_drain,
-        overall_difficulty,slider_velocity,std_ratings,taiko_ratings,ctb_ratings,
-        mania_ratings,drain_time,total_time,preview_time,timing_points,
-        beatmap_id: beatmap_id as i32,beatmapset_id: beatmapset_id as i32,thread_id,std_grade,
-        taiko_grade,ctb_grade,mania_grade,local_beatmap_offset,stack_leniency,mode,song_source,
-        tags,online_offset,title_font,is_osz2,folder_name,last_online_check,ignore_sounds,
-        ignore_skin,disable_storyboard,disable_video,visual_override,mysterious_short,
-        mysterious_last_modified,mania_scroll_speed,
-        last_played: build_option(unplayed,last_played),
-    })
-));
+fn beatmap(bytes: &[u8], version: u32) -> IResult<&[u8], Beatmap> {
+    let (rem, _beatmap_size) = cond(version < CHANGE_20191106, int)(bytes)?;
+    let (rem, artist_ascii) = opt_string(rem)?;
+    let (rem, artist_unicode) = opt_string(rem)?;
+    let (rem, title_ascii) = opt_string(rem)?;
+    let (rem, title_unicode) = opt_string(rem)?;
+    let (rem, creator) = opt_string(rem)?;
+    let (rem, difficulty_name) = opt_string(rem)?;
+    let (rem, audio) = opt_string(rem)?;
+    let (rem, hash) = opt_string(rem)?;
+    let (rem, file_name) = opt_string(rem)?;
+    let (rem, status) = ranked_status(rem)?;
+    let (rem, hitcircle_count) = short(rem)?;
+    let (rem, slider_count) = short(rem)?;
+    let (rem, spinner_count) = short(rem)?;
+    let (rem, last_modified) = datetime(rem)?;
+    let (rem, approach_rate) = difficulty_value(rem, version)?;
+    let (rem, circle_size) = difficulty_value(rem, version)?;
+    let (rem, hp_drain) = difficulty_value(rem, version)?;
+    let (rem, overall_difficulty) = difficulty_value(rem, version)?;
+    let (rem, slider_velocity) = double(rem)?;
+    let (rem, std_ratings) = star_ratings(rem, version)?;
+    let (rem, taiko_ratings) = star_ratings(rem, version)?;
+    let (rem, ctb_ratings) = star_ratings(rem, version)?;
+    let (rem, mania_ratings) = star_ratings(rem, version)?;
+    let (rem, drain_time) = int(rem)?;
+    let (rem, total_time) = int(rem)?;
+    let (rem, preview_time) = int(rem)?;
+    let (rem, timing_points) = length_count(map(int, identity), timing_point)(rem)?;
+    let (rem, beatmap_id) = int(rem)?;
+    let (rem, beatmapset_id) = int(rem)?;
+    let (rem, thread_id) = int(rem)?;
+    let (rem, std_grade) = grade(rem)?;
+    let (rem, taiko_grade) = grade(rem)?;
+    let (rem, ctb_grade) = grade(rem)?;
+    let (rem, mania_grade) = grade(rem)?;
+    let (rem, local_beatmap_offset) = short(rem)?;
+    let (rem, stack_leniency) = single(rem)?;
+    let (rem, mode) = map_opt(byte, Mode::from_raw)(rem)?;
+    let (rem, song_source) = opt_string(rem)?;
+    let (rem, tags) = opt_string(rem)?;
+    let (rem, online_offset) = short(rem)?;
+    let (rem, title_font) = opt_string(rem)?;
+    let (rem, unplayed) = boolean(rem)?;
+    let (rem, last_played) = datetime(rem)?;
+    let (rem, is_osz2) = boolean(rem)?;
+    let (rem, folder_name) = opt_string(rem)?;
+    let (rem, last_online_check) = datetime(rem)?;
+    let (rem, ignore_sounds) = boolean(rem)?;
+    let (rem, ignore_skin) = boolean(rem)?;
+    let (rem, disable_storyboard) = boolean(rem)?;
+    let (rem, disable_video) = boolean(rem)?;
+    let (rem, visual_override) = boolean(rem)?;
+    let (rem, mysterious_short) = cond(version < CHANGE_20140609, short)(rem)?;
+    let (rem, mysterious_last_modified) = int(rem)?;
+    let (rem, mania_scroll_speed) = byte(rem)?;
+
+    let map = Beatmap {
+        artist_ascii,
+        artist_unicode,
+        title_ascii,
+        title_unicode,
+        creator,
+        difficulty_name,
+        audio,
+        hash,
+        file_name,
+        status,
+        hitcircle_count,
+        slider_count,
+        spinner_count,
+        last_modified,
+        approach_rate,
+        circle_size,
+        hp_drain,
+        overall_difficulty,
+        slider_velocity,
+        std_ratings,
+        taiko_ratings,
+        ctb_ratings,
+        mania_ratings,
+        drain_time,
+        total_time,
+        preview_time,
+        timing_points,
+        beatmap_id: beatmap_id as i32,
+        beatmapset_id: beatmapset_id as i32,
+        thread_id,
+        std_grade,
+        taiko_grade,
+        ctb_grade,
+        mania_grade,
+        local_beatmap_offset,
+        stack_leniency,
+        mode,
+        song_source,
+        tags,
+        online_offset,
+        title_font,
+        last_played: build_option(unplayed, last_played),
+        is_osz2,
+        folder_name,
+        last_online_check,
+        ignore_sounds,
+        ignore_skin,
+        disable_storyboard,
+        disable_video,
+        visual_override,
+        mysterious_short,
+        mysterious_last_modified,
+        mania_scroll_speed,
+    };
+
+    Ok((rem, map))
+}
 
 writer!(Beatmap [this,out,version: u32] {
     //Write into a writer without prefixing the length
@@ -438,33 +492,46 @@ writer!(Beatmap [this,out,version: u32] {
     }
 });
 
-named!(timing_point<&[u8], TimingPoint>, do_parse!(
-    bpm: double >>
-    offset: double >>
-    inherits: boolean >>
-    (TimingPoint{
-        bpm,offset,inherits
-    })
-));
+fn timing_point(bytes: &[u8]) -> IResult<&[u8], TimingPoint> {
+    let (rem, bpm) = double(bytes)?;
+    let (rem, offset) = double(rem)?;
+    let (rem, inherits) = boolean(rem)?;
+
+    let timing_point = TimingPoint {
+        bpm,
+        offset,
+        inherits,
+    };
+
+    Ok((rem, timing_point))
+}
+
 writer!(TimingPoint [this,out] {
     this.bpm.wr(out)?;
     this.offset.wr(out)?;
     this.inherits.wr(out)?;
 });
 
-named_args!(star_ratings(version: u32) <&[u8], Vec<(ModSet,f64)>>, switch!(value!(version>=CHANGE_20140609),
-    true => length_count!(int, do_parse!(
-        tag!(&[0x08]) >>
-        mods: map!(int, ModSet::from_bits) >>
-        tag!(&[0x0d]) >>
-        stars: double >>
-        ((mods,stars))
-    )) |
-    false => value!(Vec::new())
-));
+fn star_ratings(bytes: &[u8], version: u32) -> IResult<&[u8], Vec<(ModSet, f64)>> {
+    if version >= CHANGE_20140609 {
+        length_count(map(int, identity), star_rating)(bytes)
+    } else {
+        Ok((bytes, Vec::new()))
+    }
+}
+
+fn star_rating(bytes: &[u8]) -> IResult<&[u8], (ModSet, f64)> {
+    let (rem, _tag) = tag(&[0x08])(bytes)?;
+    let (rem, mods) = map(int, ModSet::from_bits)(rem)?;
+    let (rem, _tag) = tag(&[0x0d])(rem)?;
+    let (rem, stars) = double(rem)?;
+
+    Ok((rem, (mods, stars)))
+}
+
 writer!(Vec<(ModSet,f64)> [this,out,version: u32] {
     if version>=CHANGE_20140609 {
-        PrefixedList(&this).wr(out)?;
+        PrefixedList(this).wr(out)?;
     }
 });
 writer!((ModSet,f64) [this,out] {
@@ -485,10 +552,16 @@ fn difficulty_value(bytes: &[u8], version: u32) -> IResult<&[u8], f32> {
     }
 }
 
-named!(ranked_status<&[u8], RankedStatus>, map_opt!(byte, RankedStatus::from_raw));
+fn ranked_status(bytes: &[u8]) -> IResult<&[u8], RankedStatus> {
+    map_opt(byte, RankedStatus::from_raw)(bytes)
+}
+
 writer!(RankedStatus [this,out] this.raw().wr(out)?);
 
-named!(grade<&[u8], Grade>, map_opt!(byte, Grade::from_raw));
+fn grade(bytes: &[u8]) -> IResult<&[u8], Grade> {
+    map_opt(byte, Grade::from_raw)(bytes)
+}
+
 writer!(Grade [this,out] this.raw().wr(out)?);
 
 fn build_option<T>(is_none: bool, content: T) -> Option<T> {

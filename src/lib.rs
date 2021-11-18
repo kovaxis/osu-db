@@ -30,10 +30,10 @@
 //!
 //! Osu `.db` formats are used internally by osu!, and are not intended to be shared.
 //! There does not seem to be any public contract on breaking changes, and breaking changes
-//! already occured twice (on 2014 and 2019), so this library might not work with future versions
+//! already occured twice (in 2014 and 2019), so this library might not work with future versions
 //! of osu!.
 //!
-//! It is currently guaranteed to work on osu! `.db` versions up to at least `20201017`.
+//! It is currently guaranteed to work on osu! `.db` versions up to at least `20211103`.
 //! The current implementation might work for a long time, or break tomorrow.
 
 //Because otherwise compiling the large beatmap nom combinator fails

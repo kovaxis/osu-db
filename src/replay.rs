@@ -25,11 +25,11 @@ pub struct Replay {
     pub replay_hash: Option<String>,
     /// Amount of 300s (fruits in ctb).
     pub count_300: u16,
-    /// Amount of 100s (drops in ctb).
+    /// Amount of 100s (drops in ctb, 150s in taiko and 200s in mania).
     pub count_100: u16,
     /// Amount of 50s (droplets in ctb).
     pub count_50: u16,
-    /// Amount of gekis (MAX scores / rainbow 300s in mania).
+    /// Amount of gekis ("MAX scores" or "rainbow 300s" in mania).
     pub count_geki: u16,
     /// Amount of katsus (200s in mania, droplet misses in ctb).
     pub count_katsu: u16,

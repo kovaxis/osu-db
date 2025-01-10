@@ -7,6 +7,7 @@ use std::{convert::identity, hash::Hash};
 /// While parsing, these changes are automatically handled depending on the `osu!.db` version.
 const CHANGE_20140609: u32 = 20140609;
 const CHANGE_20191106: u32 = 20191106;
+const CHANGE_20250107: u32 = 20250107;
 
 /// A structure representing the `osu!.db` binary database.
 /// This database contains pre-processed data and settings for all available osu! beatmaps.
@@ -514,31 +515,45 @@ writer!(TimingPoint [this,out] {
 
 fn star_ratings(bytes: &[u8], version: u32) -> IResult<&[u8], Vec<(ModSet, f64)>> {
     if version >= CHANGE_20140609 {
-        length_count(map(int, identity), star_rating)(bytes)
+        length_count(map(int, identity), |bytes| star_rating(bytes, version))(bytes)
     } else {
         Ok((bytes, Vec::new()))
     }
 }
 
-fn star_rating(bytes: &[u8]) -> IResult<&[u8], (ModSet, f64)> {
+// Before breaking change 20250107 this was an Int-Double pair, which changed
+// to an Int-Float pair to massively reduce storage overhead.
+fn star_rating(bytes: &[u8], version: u32) -> IResult<&[u8], (ModSet, f64)> {
     let (rem, _tag) = tag(&[0x08])(bytes)?;
     let (rem, mods) = map(int, ModSet::from_bits)(rem)?;
-    let (rem, _tag) = tag(&[0x0d])(rem)?;
-    let (rem, stars) = double(rem)?;
 
-    Ok((rem, (mods, stars)))
+    if version < CHANGE_20250107 {
+        let (rem, _tag) = tag(&[0x0d])(rem)?;
+        let (rem, stars) = double(rem)?;
+        Ok((rem, (mods, stars)))
+    } else {
+        let (rem, _tag) = tag(&[0x0c])(rem)?;
+        let (rem, stars) = single(rem)?;
+        Ok((rem, (mods, stars as f64)))
+    }
 }
 
 writer!(Vec<(ModSet,f64)> [this,out,version: u32] {
     if version>=CHANGE_20140609 {
-        PrefixedList(this).wr(out)?;
+        PrefixedList(this).wr_args(out, version)?;
     }
 });
-writer!((ModSet,f64) [this,out] {
+writer!((ModSet,f64) [this,out,version: u32] {
     0x08_u8.wr(out)?;
     this.0.bits().wr(out)?;
-    0x0d_u8.wr(out)?;
-    this.1.wr(out)?;
+
+    if version < CHANGE_20250107 {
+        0x0d_u8.wr(out)?;
+        this.1.wr(out)?;
+    } else {
+        0x0c_u8.wr(out)?;
+        (this.1 as f32).wr(out)?;
+    }
 });
 
 /// Before the breaking change in 2014 several difficulty values were stored as bytes.

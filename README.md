@@ -11,7 +11,7 @@ loading, modifying and saving the following osu! file formats:
 To use, simply add this line to your `Cargo.toml`:
 
 ```toml
-osu-db = "0.3"
+osu-db = "0.2"
 ```
 
 After that you will want to use the different load/save functions on the

@@ -3,6 +3,10 @@ TODO:
 
 - Support replays with the "Target Practice" mod enabled.
 
+# 0.2.1
+
+- Added support for a beatmap breaking change in `20250107`, which changes `Double` to `Float`.
+
 # 0.2
 
 - Added support for osu! binary files from `20191106` up to at least `20201017`.
